@@ -1,0 +1,61 @@
+# Keel — Foundry configuration
+# Compiler settings mirror Uniswap v4-core / v4-periphery (solc 0.8.26, cancun) because
+# our contracts are compiled against their pinned sources. See docs/RECON.md for pin evidence.
+
+[profile.default]
+src = 'src'
+test = 'test'
+script = 'script'
+out = 'out'
+libs = ['lib']
+
+solc_version = '0.8.26'
+evm_version = 'cancun'          # v4-core requires transient storage (TSTORE/TLOAD)
+bytecode_hash = 'none'
+
+# via_ir is OFF by default for fast iteration. v4's own `debug` profile does the same.
+# The `deploy` profile below matches upstream's production settings; use it for anything
+# whose bytecode matters (hook address mining, verified deployments).
+via_ir = false
+optimizer = true
+optimizer_runs = 800
+
+ffi = false                      # security: no arbitrary host command execution from tests
+fs_permissions = [{ access = 'read', path = './out' }]
+
+[profile.default.fuzz]
+runs = 1000
+seed = '0x4b65656c'              # "Keel" — deterministic fuzzing for reproducible evidence
+
+[profile.default.invariant]
+runs = 256
+depth = 128
+fail_on_revert = false
+
+# Heavier fuzzing for adversarial passes (Phase 7).
+[profile.deep.fuzz]
+runs = 100000
+
+[profile.deep.invariant]
+runs = 2048
+depth = 256
+
+# Production-equivalent compilation. Bytecode from this profile is what gets deployed
+# and what hook-address mining must be run against.
+[profile.deploy]
+via_ir = true
+optimizer_runs = 44444444
+
+[fmt]
+line_length = 120
+tab_width = 4
+bracket_spacing = false
+int_types = 'long'
+
+# RPC endpoints resolve from environment variables; real URLs live in .env (gitignored).
+# Public fallbacks are included so a clone works without keys, but they are rate limited
+# and are NOT archive nodes — fork tests at historical blocks need a real archive URL.
+[rpc_endpoints]
+unichain = "${UNICHAIN_RPC_URL}"
+unichain_sepolia = "${UNICHAIN_SEPOLIA_RPC_URL}"
+mainnet = "${MAINNET_RPC_URL}"
