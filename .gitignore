@@ -1,0 +1,35 @@
+# Foundry
+out/
+cache/
+broadcast/
+docs/book/
+.gas-snapshot.tmp
+foundry.lock
+
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+keystore/
+secrets/
+
+# Claude Code machine-local settings (RPC URLs, paths)
+.claude/settings.local.json
+CLAUDE.local.md
+
+# Python
+__pycache__/
+*.pyc
+
+# Node / tooling
+node_modules/
+package-lock.json
+
+# OS
+.DS_Store
+
+# Analysis raw chunk cache (regenerate with analysis/fetch.py)
+data/raw/
+data/unichain-dataset.json
