@@ -185,3 +185,46 @@ Entry format: date, decision, alternatives considered, reason, evidence, consequ
   stage is recorded.
 
 ---
+
+## D-0009 — Accuracy incident: mistranscribed commit sha in `docs/RECON.md`
+
+- **Date:** 2026-08-28 (Phase 0, session 2)
+- **Status:** corrected
+- **Decision:** Record, rather than quietly fix, an error found in a block labelled "verbatim".
+- **What happened:** `docs/RECON.md` §4.1 presented a `git ls-remote --tags` block whose final
+  line read `7170eec9… refs/tags/v1.2.1`. A live re-query in session 2 showed that
+  `7170eec9…` is actually `refs/tags/v1.2.0-rc.1`, and `v1.2.1` is
+  `acbd604c409a827f7f98c9517236da860c4fca1a` — which is what the surrounding prose had said all
+  along. The transcription dropped a line and reattached the wrong ref name.
+- **Reason for recording it:** a block labelled verbatim that is not verbatim is the exact
+  failure mode this project's rules exist to prevent, and it survived into a file that other
+  documents treat as ground truth. Silently correcting it would destroy the signal that
+  transcription — not just reasoning — is a place where errors enter.
+- **Evidence:** `git ls-remote --tags https://github.com/OpenZeppelin/uniswap-hooks | grep v1.2`
+  re-run 2026-08-28. The corrected block and an inline correction note are in `docs/RECON.md`
+  §4.1.
+- **Consequence:** **Never hand-transcribe command output.** Redirect it to the file, or paste
+  it whole. Nothing downstream depended on the wrong sha (`uniswap-hooks` is not vendored, per
+  D-0005), so the blast radius was zero this time. It will not always be.
+
+---
+
+## D-0010 — Stale submodule SHAs found in the git index
+
+- **Date:** 2026-08-28 (Phase 0, session 2)
+- **Status:** corrected
+- **Decision:** Re-stage all submodules so the index records the resolved pins before the first
+  commit.
+- **What happened:** session 1 resolved the dependency pins (D-0004) and checked them out in the
+  working tree, but the git **index** still held the earlier `forge install` defaults —
+  forge-std `da5b326f…`, openzeppelin-contracts `9d0459ea…`, solmate `89365b88…`, v4-core
+  `46c68346…`. `git submodule status` flagged this with a `+` prefix on four of six modules.
+  The first commit would have recorded pins that contradict `docs/RECON.md` §4.3, and a fresh
+  clone would not have reproduced the verified build.
+- **Reason for recording it:** the evidence in `RECON.md` was correct and the working tree was
+  correct, yet the artifact that a future session would actually inherit was wrong. Verifying a
+  fact is not the same as verifying that the fact got persisted.
+- **Evidence:** index-vs-worktree comparison run in session 2; after `git add lib/…` the two
+  agree, and both match `docs/RECON.md` §4.3.
+- **Consequence:** the pre-commit checklist includes `git submodule status` — **any `+` or `-`
+  prefix blocks the commit.** Added to the `release-check` skill.
