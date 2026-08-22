@@ -3,50 +3,69 @@
 **Read this file before anything else in a new session.** It is the top of the source-of-truth
 hierarchy. Update it after every meaningful milestone, and before any compaction.
 
-**Last updated:** 2026-08-28 (Phase 0, session 2)
+**Last updated:** 2026-08-28 (Phase 1 complete)
 
 ---
 
 ## Current phase
 
-**Phase 0 — recon and scaffold. COMPLETE.**
-**Blocked on: product owner approval to begin Phase 1.** Do not start Phase 1 without it.
+**Phase 1 — current Uniswap v4 verification. COMPLETE.**
+Proceeding autonomously through Phase 2 → 3 → 4 (kill gate), per the owner's standing approval.
 
 ## Current objective
 
-Present the Phase 0 plan and wait for approval.
+Phase 2 — prior art and security research. Run `research-reviewer`; classify every finding;
+stop and report if something already provides substantially the same runtime protection.
+
+## Work completed in Phase 1
+
+- Verified all ten `IHooks` callback signatures **including return tuples** (previously
+  `UNVERIFIED`) from source, with line numbers. `docs/RECON-hooks.md` §2.
+- Verified callback ordering in `PoolManager.modifyLiquidity`/`swap`/`initialize`, the
+  `unlock`/settlement model, `BalanceDelta`/`BeforeSwapDelta`, all 14 permission flags,
+  `StateLibrary`/`TransientStateLibrary` read surface, dynamic-fee encoding, `Currency`,
+  and `ERC6909Claims`.
+- **Discovered `noSelfCall`** and proved its consequence with a new 9-test suite.
+- Re-verified the Unichain deployment on-chain from three independent sources.
+- Closed `RESEARCH.md` Q7 (PoolManager owner).
+- Renamed the old `docs/RECON-hooks.md` (Claude Code guard evidence) to
+  `docs/RECON-guard-hook.md`, freeing the name for Uniswap hook evidence.
 
 ## Implementation status
 
 | Area | Status |
 |---|---|
-| Protocol code | **None written, by design.** No code before design (`CLAUDE.md` rule). |
-| `src/CompileCanary.sol` | Throwaway build canary only. Proves the dependency pins compile together. **Delete once real contracts exercise the same imports.** |
-| Dependencies | Resolved, pinned, verified compiling together. `docs/RECON.md` §4. |
-| Memory architecture | Complete. All documents populated with real Phase 0 content. |
-| Permissions, hooks, rules, agents, skills | Complete and tested. |
+| Protocol code | **None written, by design.** Blocked until the Phase 4 kill gate passes. |
+| `src/CompileCanary.sol` | Throwaway pin-verification canary. |
+| `test/Phase1_V4Semantics.t.sol` | 9 characterisation tests of v4 semantics. **Not Keel tests** — Keel does not exist yet. |
+| `test/mocks/VaultStyleHookMock.sol` | Stand-in for the target hook class. Not a Keel component; never deploy. |
 | `docs/INVARIANTS.md` | Does not exist yet. **Phase 4 deliverable.** |
 
 ## Latest verified facts
 
-Full evidence in `docs/RECON.md`. Highlights:
+Full evidence in `docs/RECON.md` (environment, pins, addresses) and `docs/RECON-hooks.md`
+(v4 API). Phase 1 highlights:
 
-- `FACT` Toolchain: Foundry 1.7.1, solc 0.8.26, evm `cancun`, git 2.50.1, node v24.16.0,
-  macOS 26.6.2 arm64, Claude Code 2.1.250.
-- `FACT` Pins: v4-core `59d3ecf5`, v4-periphery `dce236d4`, permit2 `cc56ad0f`,
-  forge-std `1de6eecf`, solmate `4b47a190`, openzeppelin-contracts `dbb6104c`.
-  v4-core follows v4-periphery's own submodule pin, not the `v4.0.0` tag (D-0004).
-- `FACT` `forge build` and `forge test` pass — 2 tests, `CompileCanaryTest`.
-- `FACT` Unichain PoolManager `0x1f98400000000000000000000000000000000004` (chain id 130),
-  confirmed by two independent sources (docs + `StateView.poolManager()` on-chain).
-- `FACT` `https://mainnet.unichain.org` served historical `eth_call` back to block 1,000,000 —
-  a Unichain fork reproduction looks plausible without a paid archive provider.
-- `FACT` `SwapParams` is in `@uniswap/v4-core/src/types/PoolOperation.sol`, **not**
-  `IPoolManager.SwapParams`, at our pins.
-- `FACT` `BaseHook.sol` does **not** exist in v4-periphery at our pin. The tutorial import is
-  wrong here. What Keel's hook inherits from is an open decision (D-0005).
-- `FACT` PreToolUse hook suite: **38 passed, 0 failed** (`docs/RECON-hooks.md`). The hook was
-  also observed blocking two real tool calls.
+- `FACT` **v4 skips every hook callback when the hook itself is the caller** — `noSelfCall`,
+  `Hooks.sol:170-175`, plus inline guards at :217, :253, :293. Proven by
+  `test/Phase1_V4Semantics.t.sol`, corroborated by upstream `SkipCallsTestHook.t.sol`.
+  **This is the most consequential finding so far.** See D-0011.
+- `FACT` The only invariant v4 enforces is `NonzeroDeltaCount == 0` (`PoolManager.sol:112`) — a
+  conservation check, not a solvency check. The gap Keel targets is real.
+- `FACT` With address bits 0-3 clear, the protocol **discards** any delta a hook returns
+  (`PoolManager.sol:224`, `Hooks.sol:301`). "Observe and revert only" is protocol-enforced, and
+  is proven by `test_returnedDeltaIgnoredWhenFlagClear`.
+- `FACT` A guard has three sources of truth the guarded hook cannot forge: `StateLibrary` pool
+  and position reads, `TransientStateLibrary` in-flight deltas, and raw token balances.
+  **The strongest positive result for the thesis.**
+- `FACT` `SwapParams`/`ModifyLiquidityParams` are free-standing structs in
+  `types/PoolOperation.sol`; `beforeSwap` must return exactly 96 bytes (`Hooks.sol:259`).
+- `FACT` `BaseHook.sol` is absent from all six dependencies; there is no `v4-periphery/src/utils/`.
+- `FACT` Unichain PoolManager `0x1f98400000000000000000000000000000000004` re-verified at block
+  57148459 against three independent sources.
+- `FACT` **Q7 closed.** The PoolManager owner `0x2BAD…46CD` has no code on Unichain; its power is
+  bounded to a protocol fee capped at 0.1% (`ProtocolFeeLibrary.sol:8`). It cannot touch pool
+  principal, LP positions, or hook state. Non-critical.
 
 ## Blockers
 
@@ -78,19 +97,28 @@ Not blocking — Phase 1 can proceed without them.
 
 ## Next action
 
-Await approval, then begin **Phase 1 — Uniswap v4 research**: read actual source in `lib/`,
-verify `beforeSwap`/`afterSwap`/liquidity callback signatures **including return tuples**, fee
-override encoding, permission flags and address mining, dynamic-fee initialisation, and
-`StateLibrary` reads. Record every signature with file path and line number in `docs/RECON.md`.
-Also identify the PoolManager owner `0x2BAD8182C09F50c8318d769245beA52C32Be46CD`
-(`RESEARCH.md` Q7).
+Begin **Phase 2 — prior art and security research**. Run the `research-reviewer` subagent over
+ERC-7265, ERC-4626 invariant libraries, OpenZeppelin `uniswap-hooks`, Foundry/Echidna/Halmos/
+Certora invariant tooling, runtime monitoring products, and any v4 hook safety library.
+Classify each finding. **If something already provides substantially the same runtime
+protection, stop and report it.**
+
+Carry D-0011 into that search: the honest question is now *"does anything already provide a
+cooperative, opt-in accounting-invariant harness for share-issuing v4 hooks?"*
 
 ## Test status
 
-- **Last passing:** `test/CompileCanary.t.sol:CompileCanaryTest` — `test_managerDeployed`,
-  `test_hookFlagDecoding`. 2 passed, 0 failed.
+- **Last passing:** `forge test` — 11 tests, 0 failures.
+  `Phase1V4SemanticsTest` (9) + `CompileCanaryTest` (2).
 - **Last failing:** none.
 - **Hook harness:** `.claude/hooks/guard-bash.test.sh` — 38 passed, 0 failed.
+
+## Security status
+
+No Keel code exists, so nothing to review yet. Two protocol-level security properties are
+established and **proven by test** for later use: returns-delta bits clear means the protocol
+discards hook deltas, and a guard has non-forgeable state sources. The dominant open risk is
+unchanged — a false positive that freezes withdrawals (`THREAT_MODEL.md` V7).
 
 ## Deployment status
 
