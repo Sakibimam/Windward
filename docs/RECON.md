@@ -551,7 +551,7 @@ itself the stronger proof that the negation works.
 
 `INFERENCE` The second layer firing during ordinary work is the strongest available evidence
 that the hook is genuinely wired in, since it interrupted a real tool call rather than a
-harness. Full hook evidence is in `docs/RECON-hooks.md`.
+harness. Full hook evidence is in `docs/RECON-guard-hook.md`.
 
 ---
 
@@ -691,9 +691,9 @@ Both directions are covered: 24 cases that **must** block, and 14 ordinary devel
 that **must not**.
 
 `FACT` **38 passed, 0 failed.** Verbatim output, the harness, the live-firing evidence, and the
-hook's known limitations are in **`docs/RECON-hooks.md`**. The harness is vendored at
+hook's known limitations are in **`docs/RECON-guard-hook.md`**. The harness is vendored at
 `.claude/hooks/guard-bash.test.sh` and must be re-run after any change to the hook.
 
 `FACT` The hook was additionally observed blocking two **real** tool calls during session 2 (a
 heredoc containing the literal text `rm -rf out`, and a genuine `git add .env` test). See
-`docs/RECON-hooks.md` and §5 above.
+`docs/RECON-guard-hook.md` and §5 above.

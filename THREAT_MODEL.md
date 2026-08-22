@@ -77,7 +77,7 @@ threat model.**
 | V16 | Transcription error puts a wrong value into an evidence file. | **Occurred** — D-0009. Mitigation: never hand-transcribe; redirect output to file. |
 | V17 | A verified fact is not persisted to the artifact a future session inherits. | **Occurred** — D-0010 (stale submodule index). Mitigation: `git submodule status` in the pre-commit checklist. |
 | V18 | Secret exfiltration via a subprocess that Claude Code's Read/Edit deny rules do not cover. | **Accepted risk — see §6.** |
-| V19 | A hook or permission rule so brittle it breaks normal development, and gets disabled wholesale — losing all protection. | Mitigated by keeping hooks few, simple, and tested (`docs/RECON-hooks.md`). |
+| V19 | A hook or permission rule so brittle it breaks normal development, and gets disabled wholesale — losing all protection. | Mitigated by keeping hooks few, simple, and tested (`docs/RECON-guard-hook.md`). |
 | V20 | Owner cannot audit the code, so an error ships silently. | **Structural, unmitigable by the owner.** The review chain and this file are the compensating control. |
 
 ## 5. Mitigations map

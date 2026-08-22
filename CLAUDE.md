@@ -63,7 +63,7 @@ Evidence lives in `docs/RECON.md`. If any document disagrees with it, `docs/RECO
 | `script/` | Deployment scripts. Empty. |
 | `lib/` | Pinned dependencies as git submodules. **Never `forge update`.** |
 | `docs/RECON.md` | All Phase 0/1 evidence: tool output, pins, verified signatures, addresses. |
-| `docs/RECON-hooks.md` | PreToolUse hook evidence and test results. |
+| `docs/RECON-guard-hook.md` | PreToolUse hook evidence and test results. |
 | `docs/INVARIANTS.md` | **Phase 4 deliverable.** Does not exist yet. |
 | `.claude/rules/` | Always-loaded coding, security, testing, and research rules. |
 | `.claude/agents/` | Four read-only review subagents. |

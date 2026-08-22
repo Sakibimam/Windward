@@ -23,6 +23,13 @@ settles perfectly. The PoolManager will happily wave it through.
 > preventing economically invalid state transitions that the PoolManager's settlement invariant
 > does not catch.
 
+> **Phase 1 constraint (`FACT`, D-0011).** v4 skips every hook callback when the hook itself is
+> the caller (`Hooks.sol:170-175` and inline guards at :217, :253, :293; proven by
+> `test/Phase1_V4Semantics.t.sol`). Vault-style hooks own their LP position and call the
+> PoolManager themselves, so **a callback-based guard cannot see the withdrawals that burn
+> shares.** Keel can therefore only be a **cooperative, opt-in library the hook author installs**
+> — not an external safety net. Whether that is still worth building is the Phase 4 kill gate.
+
 **This is a hypothesis, not a conclusion.** Phase 4 exists specifically to test whether a
 generic invariant for this class actually exists and can be stated without knowledge of any
 particular exploit. If it cannot, the correct outcome is to kill the project (see §Kill
