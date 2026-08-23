@@ -228,3 +228,39 @@ Entry format: date, decision, alternatives considered, reason, evidence, consequ
   agree, and both match `docs/RECON.md` §4.3.
 - **Consequence:** the pre-commit checklist includes `git submodule status` — **any `+` or `-`
   prefix blocks the commit.** Added to the `release-check` skill.
+
+---
+
+## D-0011 — `noSelfCall` forces Keel to be a cooperative library, not an observer hook
+
+- **Date:** 2026-08-28 (Phase 1)
+- **Status:** active, and **the central input to the Phase 4 kill gate**
+- **Decision:** Record that a callback-based guard cannot observe the operations Keel exists to
+  guard, and carry the consequence into Phase 4 rather than designing around it now.
+- **What was found:** `FACT` v4 skips **every** hook callback when the hook itself is the caller.
+  `lib/v4-core/src/libraries/Hooks.sol:170-175` defines `modifier noSelfCall`, applied to
+  `beforeInitialize` (:178), `afterInitialize` (:187), `beforeModifyLiquidity` (:200),
+  `beforeDonate` (:320), `afterDonate` (:330); the other three carry the same guard inline as an
+  early return — `afterModifyLiquidity` (:217), `beforeSwap` (:253), `afterSwap` (:293).
+  Proven by `test/Phase1_V4Semantics.t.sol` (9 tests passing) and corroborated by upstream's own
+  `lib/v4-core/test/SkipCallsTestHook.t.sol`.
+- **Why it matters:** the target class — vault-style wrappers that tokenise LP positions — owns
+  its LP position and calls `poolManager.modifyLiquidity` **itself**, with users entering through
+  the hook's own functions. Under `noSelfCall` those calls fire no callbacks. A guard placed in
+  `afterRemoveLiquidity` is therefore structurally blind to exactly the withdrawals that mint and
+  burn shares.
+- **Alternatives considered:**
+  1. *Guard as a separate observer hook on the same pool* — **impossible.** A pool has exactly one
+     hook (`PoolKey.hooks`), and there is no mechanism by which one contract observes another's
+     callbacks.
+  2. *Guard in the swap callbacks only* — those do fire for external swappers, but swaps are not
+     where shares are minted or burned. It would watch the wrong event.
+  3. *Guard as a library/modifier the hook calls itself* — the only mechanism that can observe
+     share mint/burn. **Cooperative and opt-in.**
+- **Consequence:** Keel cannot be an external safety net imposed on an arbitrary hook. It can
+  only be a correctness harness a hook author installs in their own code — the `SafeERC20` /
+  `ReentrancyGuard` category. That is a real and defensible product category, but it is a
+  **materially weaker claim** than "a runtime safety layer for Uniswap v4 hooks", and every
+  artifact must stop making the stronger claim. `PROJECT.md` and `README` must say "opt-in".
+- **Open:** whether a cooperative guard is worth building at all is **Phase 4's** question, and
+  the `adversarial-reviewer` must be pointed directly at it. It is not settled here.
