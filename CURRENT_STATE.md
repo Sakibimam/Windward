@@ -3,19 +3,27 @@
 **Read this file before anything else in a new session.** It is the top of the source-of-truth
 hierarchy. Update it after every meaningful milestone, and before any compaction.
 
-**Last updated:** 2026-08-28 (Phase 1 complete)
+**Last updated:** 2026-08-28 (Phases 1-3 complete; KILL GATE reached early)
 
 ---
 
 ## Current phase
 
-**Phase 1 — current Uniswap v4 verification. COMPLETE.**
-Proceeding autonomously through Phase 2 → 3 → 4 (kill gate), per the owner's standing approval.
+**Phases 1, 2, and 3 COMPLETE. Phase 4 NOT started — deliberately.**
+
+> ## STOPPED AT THE KILL GATE
+>
+> Phase 2 triggered its own stop condition ("if something provides substantially the same
+> runtime protection, STOP and report it"). **`DECISIONS.md` D-0013 recommends killing Keel in
+> its current form.** Phase 4 invariant design has not begun and no guard code exists.
+>
+> **Awaiting the product owner's decision: kill, pivot, or override.**
+> Do not start Phase 4 or write any implementation until that decision is recorded here.
 
 ## Current objective
 
-Phase 2 — prior art and security research. Run `research-reviewer`; classify every finding;
-stop and report if something already provides substantially the same runtime protection.
+Present the kill recommendation with evidence, the strongest counterargument, and the best
+alternative. Then act on the owner's decision.
 
 ## Work completed in Phase 1
 

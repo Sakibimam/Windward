@@ -264,3 +264,65 @@ Entry format: date, decision, alternatives considered, reason, evidence, consequ
   artifact must stop making the stronger claim. `PROJECT.md` and `README` must say "opt-in".
 - **Open:** whether a cooperative guard is worth building at all is **Phase 4's** question, and
   the `adversarial-reviewer` must be pointed directly at it. It is not settled here.
+
+---
+
+## D-0012 — Close D-0005: `BaseHook` exists, in OpenZeppelin `uniswap-hooks`
+
+- **Date:** 2026-08-28 (Phase 2)
+- **Status:** closes D-0005 and `docs/RECON-hooks.md` H4
+- **Decision:** The hook base-contract question is answered: `BaseHook.sol` exists at
+  `src/base/BaseHook.sol` in `OpenZeppelin/uniswap-hooks` v1.2.1
+  (`acbd604c409a827f7f98c9517236da860c4fca1a`), alongside `BaseCustomAccounting.sol`,
+  `BaseCustomCurve.sol`, and `BaseAsyncSwap.sol`.
+- **Evidence:** full recursive git-tree read at the pinned SHA, `truncated: false`, 54 `.sol`
+  files. Verified by the main session, not only reported by the subagent.
+- **Consequence:** Phase 0's finding was correct but narrower than stated — `BaseHook` is absent
+  from **v4-periphery**, not from the ecosystem. Any future hook work uses `uniswap-hooks`.
+  Whether to vendor it is now moot unless the project continues in a form that needs it.
+
+---
+
+## D-0013 — Phase 2 outcome: Keel-as-runtime-guard is redundant. **KILL RECOMMENDED.**
+
+- **Date:** 2026-08-28 (Phase 2)
+- **Status:** **recommendation to the product owner. Awaiting decision. Phase 4 NOT started.**
+- **Decision:** Recommend killing Keel in its current form — a runtime invariant guard library
+  for share-issuing Uniswap v4 hooks. Do not proceed to Phase 4 invariant design or write any
+  guard implementation.
+- **Kill conditions triggered** (`PROJECT.md`), each with evidence:
+  1. **Redundant with existing tooling.** Euler's **EVC** already ships the exact architecture
+     D-0011 forces Keel into — a cooperative, opt-in, synchronous, author-installed vault status
+     check, deployed and audited, with the hard part (deferral across nested/batched calls)
+     already solved. **Phylax Credible Layer** is strictly more expressive: Solidity assertions
+     enforced at the sequencer, seeing whole-transaction state diffs, so it defeats `noSelfCall`
+     entirely at zero gas and needs no author cooperation.
+  2. **A materially simpler solution provides the same value.** Five inline lines
+     (`assetsAfter * supplyBefore >= assetsBefore * supplyAfter`) give the same protection with
+     no dependency and better auditability — and run free in CI.
+  3. **Market need insufficient.** Uniswap's own `hooklist` registry lists ~100 hooks and **zero**
+     self-described share-issuing vaults; the archetype (Bunni) had $231K TVL and is shut down.
+  4. **Novelty largely gone.** Trail of Bits published this exact failure pattern, named Bunni,
+     and prescribed the invariant on **2026-07-30 — five weeks ago**.
+- **What survives, and is genuinely unfilled** (the strongest counterargument):
+  OpenZeppelin's `uniswap-hooks` — the canonical, UF-funded library — ships
+  `BaseCustomAccounting` ("custom accounting and hook-owned liquidity") with **no backing
+  invariant** and, verified by full tree read, **no `test/invariant/` directory at all**. Its own
+  `ReHypothecationHook` documents an insolvency mode in a WARNING and guards nothing. ToB gave
+  prose, not code. Trace2Inv (FSE'24) shows guards of this family block 23/27 real exploits at
+  ~0.3% false positives. So a real hole exists — but it justifies **a contribution, not a
+  project**, and it does not answer the market evidence.
+- **Best alternative found:** ship the invariant **test kit**, not the runtime guard — a reusable
+  Foundry/Medusa property harness for OZ's `BaseCustomAccounting`, formalising ToB's three prose
+  invariants against the real v4 substrate, with a Bunni-shaped reconstruction proving the
+  property catches what three audit firms missed. `noSelfCall` becomes irrelevant (a harness
+  drives the hook's own entry points), there is no false-positive-freeze hazard, no gas cost, no
+  new attack surface, and it has a natural home as a PR to `OpenZeppelin/uniswap-hooks` or
+  `crytic/properties`.
+- **Consequence:** no protocol code has been written, so nothing is wasted. Phases 0-3 produced
+  durable, reusable evidence regardless of the decision.
+- **Unresolved either way:** `RESEARCH.md` Q4 / `docs/RECON-hooks.md` H3 — converting hook-owned
+  tick-range liquidity into an asset quantity without invoking an attacker-movable price. Nobody
+  in the prior art has solved it; Certora sidestepped it by staying inside v4-core. **If a
+  runtime guard were built anyway, this would have to be solved first or the guard is unsound as
+  well as redundant.**
