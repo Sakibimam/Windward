@@ -15,39 +15,33 @@ Research phases 1–4 append to this file. Phase 0 established only what is belo
 
 ## 1. Motivating case study — the Bunni exploit
 
-> **This is the motivating case, NOT the specification.** Do not build a Bunni detector. Build
-> against the *property class*. If Phase 3 concludes the property could not have been written by
-> someone who had never heard of Bunni, that is a kill signal — see `PROJECT.md`.
+**Phase 3 complete.** Full analysis with primary sources: **`docs/BUNNI_CASE_STUDY.md`**.
+Everything previously tagged `UNVERIFIED` here has been sourced or corrected:
 
-`UNVERIFIED` — everything in this section. It is the brief's framing as given by the product
-owner and has **not** been checked against primary sources this session. Phase 3 must establish
-each of these from primary sources (post-mortems, on-chain transactions, the protocol's own
-disclosure) or discard them.
+- `FACT` 2 September 2025; ~$8.4M (~$2.4M Ethereum, ~$5.9-6.0M Unichain).
+- `FACT` Root cause: a rounding-direction bug at `BunniHubLogic.sol:478`,
+  `newBalance = balance - balance.mulDiv(shares, currentTotalSupply)` — `mulDiv` rounds down, so
+  the *retained* idle balance rounds up.
+- `FACT` Audited by **three** firms (Pashov, Trail of Bits, Cyfrin), not two as the brief stated.
+- `FACT` **Never patched.** No fix commit exists; the protocol shut down instead.
+- `FACT` `BunniHub.withdraw()` is **not a v4 hook callback**; BunniHook implements only
+  `afterInitialize` and `beforeSwap`, and Bunni holds **no v4 LP positions at all**
+  (`modifyLiquidity` appears 0 times in `BunniHubLogic.sol`).
 
-- `UNVERIFIED` Date: September 2025.
-- `UNVERIFIED` Loss: approximately $8.4M, split across Ethereum and Unichain.
-- `UNVERIFIED` Mechanism: a rounding-direction flaw in withdrawal logic, compounded through
-  repeated withdrawals to corrupt the pool's liquidity accounting, then exploited via a swap
-  against the corrupted state.
-- `UNVERIFIED` Bunni had been audited by two reputable firms and shut down afterwards.
+**Two findings that cut against the thesis and must be confronted at the Phase 4 gate:**
 
-**Phase 3's decisive question**, to be answered honestly:
+1. `INFERENCE` **The textbook ERC-4626 invariant would NOT have caught Bunni.** Total assets per
+   share *increased* through the attack. What collapsed was the *active* component of a
+   decomposed reserve (`active = total - idle`). Rounding safety is not compositional under
+   subtraction.
+2. `INFERENCE` The invariant that would have caught it needs the protocol's **component
+   decomposition**, which a generic library cannot know. The author must declare it. Keel's
+   honest claim shrinks from "install this and be safe" to "declare what backs your shares, and
+   this enforces monotonicity on every path".
 
-> Could the violated economic property have been written down by someone who had never heard of
-> Bunni?
-
-If the honest answer is **no**, recommend killing. A property that can only be stated in
-hindsight is a detector, not an invariant.
-
-### What Phase 3 must produce
-
-1. Primary-source citations (URL + date) for the incident, replacing every `UNVERIFIED` above.
-2. A statement of the **economic property** that was violated, expressed without reference to
-   Bunni's specific code.
-3. An explicit answer to the decisive question, with reasoning.
-4. Transaction hashes and block numbers, if a Phase 8 fork reproduction is to be attempted.
-
----
+`INFERENCE` Q2 answered **partially yes**: the general principle is a-priori statable, but the
+naive version is useless and the useful version needs author-supplied structure. Not a kill on
+its own; a material weakening. See `docs/BUNNI_CASE_STUDY.md` §5 Q7.
 
 ## 2. Prior art — status: NOT YET RESEARCHED
 
