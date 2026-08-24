@@ -326,3 +326,74 @@ Entry format: date, decision, alternatives considered, reason, evidence, consequ
   in the prior art has solved it; Certora sidestepped it by staying inside v4-core. **If a
   runtime guard were built anyway, this would have to be solved first or the guard is unsound as
   well as redundant.**
+
+---
+
+## D-0014 — Kill Keel entirely (both forms). Build **Fathom**.
+
+- **Date:** 2026-08-28 (decision session)
+- **Status:** **DECIDED.** Supersedes D-0013's "pivot to test kit" alternative.
+- **Decision:** Kill Keel as a runtime guard **and** kill the invariant-test-kit pivot. Build
+  **Fathom**, a counterfactual evaluation harness for Uniswap v4 fee hooks, plus one reference
+  fee hook to demonstrate it.
+
+### The fact that decided it
+
+- `FACT` **UHI10's theme is "The Fair Flow Frontier: MEV protection and sustainable low-fee
+  liquidity on Uniswap v4."** Curriculum covers dynamic fee hooks, game-theoretic and directional
+  fee designs (incl. Nezlobin's), swap-ordering randomisation, fee-rebate systems, MEV auction
+  hooks. Hackathon 2026-08-17 → 2026-09-03; demo day 2026-09-11.
+  Source: Atrium Academy, verified 2026-08-28.
+- `INFERENCE` A security/invariant test kit is **off-theme**. It would score ~2/10 on
+  Uniswap/Atrium alignment — a 15%-weighted criterion — and judges would rightly ask why it was
+  submitted to a fee-and-MEV hookathon. This kills the D-0013 pivot for this venue, independently
+  of its technical merit.
+
+### Kill test run BEFORE committing (the Tempo lesson applied)
+
+The leading on-theme candidate was a priority-fee "MEV tax" hook (Paradigm's *Priority is All
+You Need*, applied as a drop-in hook). It was killed by measurement in ten minutes:
+
+- `FACT` Sampled 31 Unichain blocks, 223 user transactions: **only 8 (3.59%) paid any priority
+  fee at all.** Median priority fee **0**, p95 **0**, max 1,450,000 wei. Base fee is a flat
+  500,000 wei across all blocks sampled.
+- `FACT` **Unichain averages 8.2 transactions per block** (max 10 observed). The chain is not
+  congested, so there is no priority auction to tax.
+- `INFERENCE` A priority-fee-keyed mechanism collects ~nothing on Unichain today and cannot
+  discriminate arbitrage from retail flow. **This also weakens D-0001's claim** that `tx.gasprice`
+  is "a strictly better and cheaper signal" — better than a flashblock index, yes, but
+  empirically near-useless on Unichain because there is no contested priority market.
+
+### Feasibility verified before committing
+
+- `FACT` Unichain v4 `PoolManager` emitted **3,448 `Swap` events in the last 10,000 blocks**
+  (164 in the last 1,000). Block time **1.00 s** → **~30,000 real v4 swaps/day**. Ample trace data.
+- `FACT` Archive reads verified back to block 1,000,000 in Phase 0 (`docs/RECON.md` §3.3).
+- `FACT` Dynamic-fee mechanics verified from source in Phase 1: `DYNAMIC_FEE_FLAG = 0x800000`,
+  `OVERRIDE_FEE_FLAG = 0x400000`, fee returned from `beforeSwap` and only honoured for dynamic-fee
+  pools (`Hooks.sol:263`, `LPFeeLibrary.sol:15-19`).
+
+### The gap Fathom fills
+
+- `FACT` v3 LP backtesters exist (DefiLab, academic CLMM frameworks). Hacken ships a v4 hook
+  **correctness/security** harness. Metrix Finance does forward-looking LP fee **projections**.
+- `INFERENCE` **Nothing answers "does this fee hook actually leave LPs better off than the vanilla
+  pool, on real historical flow?"** Every fee-hook proposal asserts it; none measures it.
+- `FACT` The Uniswap Foundation is working with OpenZeppelin on hook data standards explicitly to
+  "give LPs a complete risk-reward picture" — the Foundation cares about this measurement problem.
+
+### Why this is the right call
+
+Competing on *mechanism novelty* against Angstrom/Sorella (uniform-price batching + priority tax,
+production team) and a cohort full of taught Nezlobin hooks is a losing game in 30 hours. Fathom
+competes on the axis almost nobody contests: **evidence**. It is on-theme (it evaluates exactly
+the fee designs the theme is about), it is infrastructure the whole cohort and the Foundation
+would use, and its demo can falsify a popular hook design live.
+
+### Consequence
+
+- No Keel guard code is written. Phases 0-3 evidence is retained and reused: the v4 semantics
+  work (Phase 1) directly supports Fathom, and the rigour discipline (replay vs reconstruction,
+  FACT/INFERENCE tagging) becomes a selling point rather than overhead.
+- `PROJECT.md` must be rewritten for Fathom. `SECURITY.md`/`THREAT_MODEL.md` shrink drastically —
+  Fathom is an off-chain/test-time tool plus one simple fee hook, not a guard in the path of funds.
