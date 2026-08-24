@@ -427,3 +427,51 @@ Re-measured over 121 blocks / 930 user transactions, segmented by destination:
 flow on Unichain.** Retail pays a constant interface default; searchers bid variably and orders
 of magnitude higher. The signal is not absent — it is concentrated in exactly the flow that
 matters.
+
+### Why the mechanism is sound *specifically* on Unichain
+
+- `FACT` Unichain's sequencer is a **TEE-based block builder (Rollup Boost, Uniswap Labs +
+  Flashbots)** and **"the TEE orders transactions based purely on priority fees."** Flashblocks
+  produce 200ms sub-blocks inside TEEs enforcing priority-by-fee ordering.
+  Sources: `blog.uniswap.org/rollup-boost-is-live-on-unichain`,
+  `blog.uniswap.org/flashblocks-are-live`, `writings.flashbots.net/introducing-rollup-boost`.
+- `INFERENCE` Because ordering is purely priority-fee-based and TEE-attested, there is **no side
+  channel** — no builder bribe, no coinbase transfer — by which a searcher can buy priority
+  without revealing it in `tx.gasprice`. This is Paradigm's "Priority is all you need"
+  precondition, and Unichain satisfies it *verifiably*. A fee keyed on priority fee is therefore
+  **incentive-compatible and non-circumventable there**, which is not true on Ethereum L1.
+- `INFERENCE` Corroborating behavioural evidence: searchers pay up to 359× base fee on a chain
+  averaging **8.2 transactions per block**. On an uncongested chain that is only rational if
+  priority fee buys ordering. The observed bidding is itself proof the ordering rule binds.
+
+### Mechanism verified from source (Phase 1 + this session)
+
+- `FACT` `Hooks.sol:263` — `if (key.fee.isDynamicFee()) lpFeeOverride = result.parseFee();`
+- `FACT` `Pool.sol:303-304` — `params.lpFeeOverride.isOverride() ? removeOverrideFlagAndValidate() : ...`
+- `FACT` `LPFeeLibrary.sol` — `DYNAMIC_FEE_FLAG = 0x800000` (:15), `OVERRIDE_FEE_FLAG = 0x400000`
+  (:19), `MAX_LP_FEE = 1000000` (:25), `isOverride` (:61), `removeOverrideFlagAndValidate` (:75).
+- `INFERENCE` A hook can therefore set a **per-swap** LP fee from `beforeSwap`, computed from
+  `tx.gasprice - block.basefee`, with no oracle and no external call.
+
+### Ecosystem alignment
+
+- `FACT` **PFDA (Protocol Fee Discount Auction) is live in 2026** under UNIfication: it auctions
+  the right to swap without paying the protocol fee, burning the proceeds, explicitly to
+  "internalize MEV that would otherwise go to searchers or validators." Stated effect: **+$0.06
+  to +$0.26 LP return per $10k traded, against typical LP returns of -$1.00 to +$1.00.**
+- `FACT` UNIfication states "PFDA, v4, aggregator hooks, and bridge adapters ... are in progress."
+- `INFERENCE` Uniswap is itself building MEV internalisation and wants it in v4 hooks. Ballast is
+  the pool-level analogue that routes the captured value to **LPs** rather than the UNI burn.
+
+### Why not Fathom
+
+`INFERENCE` Fathom is a measurement tool, not a hook, at a *hookathon*; its novelty rests on
+being "the first v4 backtester," which invites "another backtester" and requires judges to trust
+a counterfactual methodology they cannot check in two minutes. Ballast keeps Fathom's real
+advantage — measured evidence nobody else has — and attaches it to a working hook. **The
+measurement becomes the proof, not the product.**
+
+### Consequence
+
+`PROJECT.md`, `SECURITY.md`, and `THREAT_MODEL.md` are rewritten for Ballast. Keel's guard work
+is dead; Phase 1's v4 semantics evidence and the measurement discipline carry forward directly.
