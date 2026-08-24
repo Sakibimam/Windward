@@ -397,3 +397,33 @@ would use, and its demo can falsify a popular hook design live.
   FACT/INFERENCE tagging) becomes a selling point rather than overhead.
 - `PROJECT.md` must be rewritten for Fathom. `SECURITY.md`/`THREAT_MODEL.md` shrink drastically —
   Fathom is an off-chain/test-time tool plus one simple fee hook, not a guard in the path of funds.
+
+---
+
+## D-0015 — Supersedes D-0014. Build **Ballast**, not Fathom.
+
+- **Date:** 2026-08-28 (decision session, second pass)
+- **Status:** **DECIDED. This is the project.**
+
+### Correction to D-0014
+
+D-0014 killed the priority-fee mechanism on the basis that "only 3.59% of Unichain transactions
+pay any priority fee." **That inference was wrong, and the error was in the denominator.**
+
+Re-measured over 121 blocks / 930 user transactions, segmented by destination:
+
+- `FACT` The zero-priority population is almost entirely **system and bot noise**: 121 txs to the
+  zero address, 121 to `0xd44f…6a29` (one each per block), and 600 to a single address
+  `0x3c3a8a41…` (~5/block). These are not swap flow.
+- `FACT` **Every one of the 21 Universal Router transactions sampled paid a priority fee, and all
+  21 paid exactly 1,450,000 wei** — a flat wallet/interface default. Universal Router
+  (`0xef740bf2…`) is verified in `docs/RECON.md` §7.
+- `FACT` `0x099b1a87…` — a 45KB contract, i.e. a bot — sent 31 transactions with priority fees
+  ranging from **1 wei to 179,440,586 wei**. Other competitive bidders paid 18.9M, 20.5M, 23.5M wei.
+- `FACT` Base fee is a flat 500,000 wei. Max observed priority is **359× base** and **123× the
+  retail default**.
+
+`INFERENCE` **Priority fee is a clean, free, on-chain discriminator between retail and searcher
+flow on Unichain.** Retail pays a constant interface default; searchers bid variably and orders
+of magnitude higher. The signal is not absent — it is concentrated in exactly the flow that
+matters.
