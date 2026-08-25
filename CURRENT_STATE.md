@@ -1,148 +1,69 @@
-# CURRENT_STATE.md — Keel
+# CURRENT_STATE.md — Windward (formerly Keel)
 
-**Read this file before anything else in a new session.** It is the top of the source-of-truth
-hierarchy. Update it after every meaningful milestone, and before any compaction.
+**Read this file before anything else in a new session.**
 
-**Last updated:** 2026-08-28 (Phases 1-3 complete; KILL GATE reached early)
+**Last updated:** 2026-08-28 — Windward implementation started, 28 tests green.
 
 ---
 
-## Current phase
+## Current project
 
-**Phases 1, 2, and 3 COMPLETE. Phase 4 NOT started — deliberately.**
+**Windward** — a volatility-adaptive dynamic-fee hook for Uniswap v4.
+Target: **UHI10 Hookathon** ("The Fair Flow Frontier: MEV protection and sustainable low-fee
+liquidity"). Submission deadline **2026-09-03**; demo day **2026-09-11**. ~30h build budget.
 
-> ## STOPPED AT THE KILL GATE
->
-> Phase 2 triggered its own stop condition ("if something provides substantially the same
-> runtime protection, STOP and report it"). **`DECISIONS.md` D-0013 recommends killing Keel in
-> its current form.** Phase 4 invariant design has not begun and no guard code exists.
->
-> **Awaiting the product owner's decision: kill, pivot, or override.**
-> Do not start Phase 4 or write any implementation until that decision is recorded here.
+**Keel is dead.** Both forms — the runtime guard (D-0013) and the invariant test kit (D-0014) —
+were killed on evidence. Read `DECISIONS.md` D-0013 through D-0016 before questioning this;
+seven candidate mechanisms were eliminated with recorded causes.
 
-## Current objective
+## Status
 
-Present the kill recommendation with evidence, the strongest counterargument, and the best
-alternative. Then act on the owner's decision.
-
-## Work completed in Phase 1
-
-- Verified all ten `IHooks` callback signatures **including return tuples** (previously
-  `UNVERIFIED`) from source, with line numbers. `docs/RECON-hooks.md` §2.
-- Verified callback ordering in `PoolManager.modifyLiquidity`/`swap`/`initialize`, the
-  `unlock`/settlement model, `BalanceDelta`/`BeforeSwapDelta`, all 14 permission flags,
-  `StateLibrary`/`TransientStateLibrary` read surface, dynamic-fee encoding, `Currency`,
-  and `ERC6909Claims`.
-- **Discovered `noSelfCall`** and proved its consequence with a new 9-test suite.
-- Re-verified the Unichain deployment on-chain from three independent sources.
-- Closed `RESEARCH.md` Q7 (PoolManager owner).
-- Renamed the old `docs/RECON-hooks.md` (Claude Code guard evidence) to
-  `docs/RECON-guard-hook.md`, freeing the name for Uniswap hook evidence.
-
-## Implementation status
-
-| Area | Status |
+| Area | State |
 |---|---|
-| Protocol code | **None written, by design.** Blocked until the Phase 4 kill gate passes. |
-| `src/CompileCanary.sol` | Throwaway pin-verification canary. |
-| `test/Phase1_V4Semantics.t.sol` | 9 characterisation tests of v4 semantics. **Not Keel tests** — Keel does not exist yet. |
-| `test/mocks/VaultStyleHookMock.sol` | Stand-in for the target hook class. Not a Keel component; never deploy. |
-| `docs/INVARIANTS.md` | Does not exist yet. **Phase 4 deliverable.** |
+| `src/WindwardHook.sol` | Implemented. Prices swaps from EWMA tick variance. |
+| `src/lib/Volatility.sol` | Implemented. EWMA + integer sqrt, clamps, capped observations. |
+| `test/WindwardHook.t.sol` | 17 tests green (10 hook, 7 library). |
+| `data/unichain-swaps.json` | 745 real Unichain v4 swaps joined to tx priority fees. |
+| Calibration | **NOT DONE.** See blockers. |
+| Simulation harness on real traces | Not started. |
+| Demo script | Not started. |
+| Testnet deploy | Not started. |
+| README | Not written. |
 
-## Latest verified facts
+**Tests: 28 passing, 0 failing** (`forge test`). Build green.
 
-Full evidence in `docs/RECON.md` (environment, pins, addresses) and `docs/RECON-hooks.md`
-(v4 API). Phase 1 highlights:
+## Blockers / next actions, in order
 
-- `FACT` **v4 skips every hook callback when the hook itself is the caller** — `noSelfCall`,
-  `Hooks.sol:170-175`, plus inline guards at :217, :253, :293. Proven by
-  `test/Phase1_V4Semantics.t.sol`, corroborated by upstream `SkipCallsTestHook.t.sol`.
-  **This is the most consequential finding so far.** See D-0011.
-- `FACT` The only invariant v4 enforces is `NonzeroDeltaCount == 0` (`PoolManager.sol:112`) — a
-  conservation check, not a solvency check. The gap Keel targets is real.
-- `FACT` With address bits 0-3 clear, the protocol **discards** any delta a hook returns
-  (`PoolManager.sol:224`, `Hooks.sol:301`). "Observe and revert only" is protocol-enforced, and
-  is proven by `test_returnedDeltaIgnoredWhenFlagClear`.
-- `FACT` A guard has three sources of truth the guarded hook cannot forge: `StateLibrary` pool
-  and position reads, `TransientStateLibrary` in-flight deltas, and raw token balances.
-  **The strongest positive result for the thesis.**
-- `FACT` `SwapParams`/`ModifyLiquidityParams` are free-standing structs in
-  `types/PoolOperation.sol`; `beforeSwap` must return exactly 96 bytes (`Hooks.sol:259`).
-- `FACT` `BaseHook.sol` is absent from all six dependencies; there is no `v4-periphery/src/utils/`.
-- `FACT` Unichain PoolManager `0x1f98400000000000000000000000000000000004` re-verified at block
-  57148459 against three independent sources.
-- `FACT` **Q7 closed.** The PoolManager owner `0x2BAD…46CD` has no code on Unichain; its power is
-  bounded to a protocol fee capped at 0.1% (`ProtocolFeeLibrary.sol:8`). It cannot touch pool
-  principal, LP positions, or hook state. Non-critical.
-
-## Blockers
-
-1. **Owner approval to begin Phase 1.** The only hard blocker.
+1. **Calibrate `feePerSigma`.** In `test_windwardEarnsMoreThanStaticFeeOnVolatileFlow` the fee
+   saturates at `FEE_MAX` (10,000 pips) for most of the sequence, giving ~15.7x the static
+   pool's fee growth. That is a **parameter problem, not a correctness problem**, but a fee
+   pinned at its ceiling is a bad demo and an easy judge objection. Calibrate against the real
+   tick series in `data/unichain-swaps.json` so the fee moves through a sensible mid-range.
+2. Build the twin-pool simulation driven by the **real** trace rather than synthetic swaps.
+3. Write `script/demo.sh` — one command, prints the comparison table.
+4. README with the honest limitations section.
+5. Testnet deploy (Unichain Sepolia addresses in `docs/RECON.md` §7 are still `UNVERIFIED` —
+   verify on-chain first).
 
 ## Known risks
 
-- `HYPOTHESIS` The core thesis is unproven. Phases 2, 3, and 4 are each allowed to kill it, and
-  should. See `PROJECT.md` kill conditions.
-- **The dominant risk is a false positive that freezes withdrawals** (`THREAT_MODEL.md` V7). It
-  is worse than the bug Keel prevents and is an explicit kill condition.
-- ~30 hours of build time against 12 phases. Phases 2–4 may consume a large share and end in a
-  kill recommendation. **That is an acceptable and honest outcome**, not a failure.
-- `UNVERIFIED` The Bunni case study is entirely unverified — it is the brief's framing, not
-  established fact. Phase 3 must source it primarily or discard it.
-- `UNVERIFIED` Unichain Sepolia addresses; not checked on-chain. Verify before Phase 10.
-- `UNVERIFIED` Whether the public RPC survives a full fork suite, and whether Ethereum archive
-  access is needed for Phase 8.
+- `HYPOTHESIS` That a volatility-scaled fee actually improves LP outcomes. Currently supported
+  by theory (LVR grows with variance) and by a synthetic twin-pool test. **Not yet demonstrated
+  on real flow.** Item 2 above is what turns this into evidence.
+- The mechanism is not novel; differentiation rests on execution quality plus the measured
+  Unichain study. Judges may still read it as "another dynamic fee hook."
+- `FACT` Fee saturation at current parameters (item 1).
 
-## Open questions for the owner
+## The measured Unichain study — the differentiator
 
-Not blocking — Phase 1 can proceed without them.
+All `FACT`, from primary on-chain data, recorded in `DECISIONS.md` D-0016:
+retail pays **301x** the median arbitrage transaction in priority fees; **82%** of arbs pay less
+than the median retail swap; **zero JIT** events; **3 unique LP addresses**; **95.4%** of swaps
+are alone in their block; **8.2 txs/block**. Unichain v4 has essentially no MEV microstructure,
+which is why Windward deliberately depends on none of those signals.
 
-1. **RPC.** No RPC environment variables are set on this machine. The public Unichain endpoint
-   works and serves archive state, so nothing is needed yet. A provider key may be needed at
-   Phase 8, and an Ethereum archive key may be needed if the Phase 8 reproduction requires
-   Ethereum-side state.
-2. **Deployment target.** Phase 10 assumes Unichain Sepolia. Confirm at that point.
+## Stale documents
 
-## Next action
-
-Begin **Phase 2 — prior art and security research**. Run the `research-reviewer` subagent over
-ERC-7265, ERC-4626 invariant libraries, OpenZeppelin `uniswap-hooks`, Foundry/Echidna/Halmos/
-Certora invariant tooling, runtime monitoring products, and any v4 hook safety library.
-Classify each finding. **If something already provides substantially the same runtime
-protection, stop and report it.**
-
-Carry D-0011 into that search: the honest question is now *"does anything already provide a
-cooperative, opt-in accounting-invariant harness for share-issuing v4 hooks?"*
-
-## Test status
-
-- **Last passing:** `forge test` — 11 tests, 0 failures.
-  `Phase1V4SemanticsTest` (9) + `CompileCanaryTest` (2).
-- **Last failing:** none.
-- **Hook harness:** `.claude/hooks/guard-bash.test.sh` — 38 passed, 0 failed.
-
-## Security status
-
-No Keel code exists, so nothing to review yet. Two protocol-level security properties are
-established and **proven by test** for later use: returns-delta bits clear means the protocol
-discards hook deltas, and a guard has non-forgeable state sources. The dominant open risk is
-unchanged — a false positive that freezes withdrawals (`THREAT_MODEL.md` V7).
-
-## Deployment status
-
-**Nothing deployed.** No contract deployed to any network, testnet or mainnet. No deployment
-credentials configured. `.env` does not exist.
-
-## Session-2 corrections
-
-Two errors from session 1 were found and fixed. Both are recorded rather than quietly patched.
-
-- **D-0009** — a block labelled "verbatim" in `docs/RECON.md` §4.1 contained a mistranscribed
-  commit sha. Corrected from a live re-query. Blast radius was zero, because `uniswap-hooks` is
-  not vendored.
-- **D-0010** — the git **index** held stale submodule SHAs from the initial `forge install`,
-  not the resolved pins. A first commit would have recorded pins contradicting `docs/RECON.md`,
-  and a fresh clone would not have reproduced the verified build. Re-staged; index and worktree
-  now agree.
-- `docs/RECON.md` §5 recorded a secrets-check result that could not have been produced as
-  written — `.env.example` did not exist. The file was created and every check genuinely re-run.
+`PROJECT.md`, `SECURITY.md`, `THREAT_MODEL.md`, `TESTING.md`, `RESEARCH.md` still describe Keel.
+They are **historical** until rewritten for Windward. `DECISIONS.md`, `docs/RECON.md`,
+`docs/RECON-hooks.md` and `docs/BUNNI_CASE_STUDY.md` remain accurate and useful.
