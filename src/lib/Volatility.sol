@@ -2,96 +2,130 @@
 pragma solidity 0.8.26;
 
 /// @title Volatility
-/// @notice Exponentially-weighted realised-variance estimator over Uniswap v4 tick observations.
+/// @notice Time-decayed realised-variance estimator over Uniswap v4 tick observations.
 ///
-/// @dev Windward needs a volatility estimate that is (a) computable from the pool's own state,
-/// (b) cheap enough to update on every swap, and (c) impossible for a counterparty to forge.
-/// Ticks satisfy all three: they are written by the PoolManager, and one tick is one basis point
-/// of price, so a tick delta is already a natural log-return in bps.
+/// @dev **What this measures, precisely.** A Uniswap tick is defined by
+/// `price = 1.0001^tick`, so `d(ln price) = d(tick) * ln(1.0001)` with
+/// `ln(1.0001) = 9.9995e-5`. A tick delta is therefore a log return scaled by ~1e-4.
+/// `sigmaWad()` returns **ticks per sqrt(second)**, NOT log-return per sqrt(second) — they
+/// differ by that ~1e-4 factor, which is absorbed into the caller's `feePerSigma`
+/// constant. Nothing here is annualised.
 ///
-/// The estimator is a standard EWMA of squared tick returns normalised by elapsed time:
+/// **This is a heuristic, not an optimal fee.** It is motivated by the observation that
+/// loss-versus-rebalancing grows with price variance, but no claim is made that this
+/// estimator, or any mapping from it to a fee, is optimal in the sense of the
+/// stochastic-control literature. Those models assume an exogenous efficient price under
+/// continuous arbitrage; this measures the realised variance of the pool price, which is a
+/// different object. See docs/WINDWARD_DESIGN.md.
 ///
-///     varNew = alpha * (dTick^2 / dt) + (1 - alpha) * varOld
-///
-/// `sigma = sqrt(var)` then has units of ticks per sqrt(second), i.e. bps per sqrt(second),
-/// which is exactly the quantity the LVR literature scales the optimal fee by.
+/// **Decay is a function of elapsed TIME, not of observation count.** An earlier version
+/// decayed once per observation, which let a trader wash the estimate back to its floor
+/// with dust swaps in a single block (20x fee suppression, demonstrated in
+/// `test/WindwardAttack.t.sol`) and left a pool pinned at its ceiling indefinitely once it
+/// stopped trading. Both are closed by making the weight depend on `dt`.
 library Volatility {
-    /// @dev Fixed-point scale for `alpha` and for the stored variance. 1e18 throughout.
+    /// @dev Fixed-point scale for the variance, the decay factor and sigma. 1e18.
     uint256 internal constant WAD = 1e18;
 
-    /// @dev Elapsed time is clamped into [MIN_DT, MAX_DT] seconds before dividing.
+    /// @dev Elapsed time is capped before use. Beyond this the decay factor is
+    /// indistinguishable from zero anyway, and the cap keeps the shift bounded.
+    uint256 internal constant MAX_DT = 7 days;
+
+    /// @dev Upper bound on a single observation, in tick^2 per second.
     ///
-    /// MIN_DT stops a same-second burst of swaps from dividing by zero, and — more importantly —
-    /// from producing an unbounded variance spike that an attacker could use to drive the fee to
-    /// its ceiling and grief honest swappers. MAX_DT stops a long quiet period from decaying a
-    /// genuine variance estimate to zero in a single step.
-    uint256 internal constant MIN_DT = 1;
-    uint256 internal constant MAX_DT = 3600;
+    /// A swap can cross the entire curve, so `dTick^2` is bounded only by ~3.15e12 (the
+    /// full tick range squared). This cap sits deliberately far BELOW that: 1e8 is a
+    /// ~10,000-tick (2.7x price) move in one second, outside anything legitimate, while
+    /// still bounding how long a single crafted swap can dominate the estimate. An
+    /// earlier cap of 1e12 was inert — it sat above every reachable move, so it bounded
+    /// nothing at all.
+    uint256 internal constant MAX_OBSERVATION = 1e8;
 
-    /// @dev Per-observation cap on squared return, in tick^2 per second. A single swap may move
-    /// the tick arbitrarily far (a swap can cross the whole curve), so without this cap one
-    /// crafted swap could dominate the EWMA for a long time. 1e12 corresponds to a ~1e6-tick
-    /// move in one second, far beyond any legitimate price change.
-    uint256 internal constant MAX_OBSERVATION = 1e12;
-
-    /// @notice Folds one observation into an EWMA variance.
-    /// @param varianceWad Previous variance estimate, WAD-scaled, in tick^2 per second.
-    /// @param tickBefore  Pool tick at the previous observation.
-    /// @param tickAfter   Pool tick now.
-    /// @param dt          Seconds elapsed since the previous observation.
-    /// @param alphaWad    Smoothing factor in (0, WAD]. Larger reacts faster.
-    /// @return newVarianceWad Updated variance estimate, WAD-scaled.
-    function update(uint256 varianceWad, int24 tickBefore, int24 tickAfter, uint256 dt, uint256 alphaWad)
+    /// @notice Folds one observation into a time-decayed EWMA variance.
+    ///
+    /// @dev `varNew = w*varOld + (1-w)*observation` where `w = 2^(-dt/halfLife)`.
+    ///
+    /// **`dt == 0` returns the previous variance unchanged, and the caller MUST NOT
+    /// advance its stored tick/timestamp.** No time has elapsed, so there is no
+    /// variance-per-unit-time to measure. Leaving the anchor in place means a move split
+    /// into same-block slices is not erased — it is measured in full against the next
+    /// observation that does have elapsed time. This is what closes the dust-swap
+    /// suppression attack: same-block swaps cannot move the estimate at all.
+    ///
+    /// @param varianceWad Previous variance, WAD-scaled, in tick^2 per second.
+    /// @param tickBefore  Tick at the previous timestamped observation.
+    /// @param tickAfter   Tick now.
+    /// @param dt          Seconds since the previous timestamped observation.
+    /// @param halfLife    Seconds over which an old estimate loses half its weight.
+    function update(uint256 varianceWad, int24 tickBefore, int24 tickAfter, uint256 dt, uint256 halfLife)
         internal
         pure
         returns (uint256 newVarianceWad)
     {
-        if (dt < MIN_DT) dt = MIN_DT;
+        if (dt == 0) return varianceWad;
         if (dt > MAX_DT) dt = MAX_DT;
 
-        // int24 subtraction cannot overflow int256, and the absolute value of the difference of
-        // two int24 values is at most 2^24, so `sq` is at most 2^48 and the WAD scaling below
-        // cannot overflow uint256.
+        // |int24 - int24| <= 2^25, so sq <= 2^50; sq * WAD <= ~1.1e33. No overflow.
         int256 diff = int256(tickAfter) - int256(tickBefore);
         uint256 absDiff = uint256(diff < 0 ? -diff : diff);
         uint256 sq = absDiff * absDiff;
 
-        // Rounds DOWN. Under-stating an observation biases the fee downward, which favours the
-        // swapper over the LP. That is the conservative direction for a guard that can otherwise
-        // only make swaps more expensive: a fee that is too low costs LPs some revenue, whereas a
-        // fee that is too high can price honest flow out of the pool entirely.
-        uint256 observation = sq / dt;
-        if (observation > MAX_OBSERVATION) observation = MAX_OBSERVATION;
+        // WAD scaling is applied BEFORE the division so the quotient keeps its fraction.
+        // Dividing first truncated every observation with dTick^2 < dt to zero, which on
+        // real Unichain flow was 52-85% of them, pinning the fee at its floor.
+        uint256 observationWad = (sq * WAD) / dt;
+        uint256 capWad = MAX_OBSERVATION * WAD;
+        if (observationWad > capWad) observationWad = capWad;
 
-        // varNew = alpha * observation + (1 - alpha) * varOld, all WAD-scaled.
-        //
-        // `observation` is a raw integer (tick^2 per second); its WAD-scaled form is
-        // `observation * WAD`. The weighted term is therefore
-        //     (observation * WAD) * alphaWad / WAD  ==  observation * alphaWad
-        // which is what is written below. Writing it as `observation * alphaWad / WAD` would
-        // divide by WAD once too often and leave the result unscaled, which makes `sigma()`
-        // — which divides by WAD again — return 0 for every realistic observation.
-        //
-        // Overflow: observation <= MAX_OBSERVATION (1e12) and alphaWad <= WAD (1e18), so the
-        // product is at most 1e30, far below uint256 max.
-        //
-        // Rounds DOWN on the decay term, same rationale as above.
-        uint256 weighted = observation * alphaWad;
-        uint256 decayed = (varianceWad * (WAD - alphaWad)) / WAD;
-        newVarianceWad = weighted + decayed;
+        uint256 w = decayFactor(dt, halfLife);
+
+        // Rounds DOWN. A truncated estimate biases the fee toward the swapper, which is
+        // the safer direction: a fee slightly too low costs LPs a little revenue, whereas
+        // a fee too high prices honest flow out of the pool entirely.
+        newVarianceWad = (w * varianceWad + (WAD - w) * observationWad) / WAD;
     }
 
-    /// @notice Converts a WAD-scaled variance into sigma, in ticks per sqrt(second).
-    /// @dev Rounds DOWN (integer sqrt truncates), again biasing the fee low.
-    function sigma(uint256 varianceWad) internal pure returns (uint256) {
-        return sqrt(varianceWad / WAD);
+    /// @notice `2^(-dt/halfLife)`, WAD-scaled, in [0, WAD].
+    /// @dev Exact halvings for the integer part, linear interpolation across the
+    /// remainder. The interpolation understates the true exponential by at most ~6% of
+    /// the factor — immaterial for a heuristic — and is monotone non-increasing in `dt`,
+    /// which is the property that matters: a longer gap can never retain more weight.
+    function decayFactor(uint256 dt, uint256 halfLife) internal pure returns (uint256) {
+        if (halfLife == 0) return 0;
+        uint256 n = dt / halfLife;
+        if (n >= 64) return 0; // 2^-64 is zero at WAD precision
+        uint256 w = WAD >> n;
+        uint256 rem = dt % halfLife;
+        if (rem != 0) {
+            // Interpolate from w down toward w/2 across the partial half-life.
+            w -= (w * rem) / (2 * halfLife);
+        }
+        return w;
     }
 
-    /// @notice Integer square root, Babylonian method. Returns floor(sqrt(x)).
+    /// @notice sigma, WAD-scaled, in ticks per sqrt(second).
+    /// @dev `sqrt(varianceWad * WAD) == sigma * WAD` exactly. Computing
+    /// `sqrt(varianceWad / WAD)` instead truncated twice and quantised the fee onto a
+    /// ladder whose first rung was 40% of the entire fee floor.
+    /// Max input: MAX_OBSERVATION * WAD * WAD = 1e44, well inside uint256.
+    function sigmaWad(uint256 varianceWad) internal pure returns (uint256) {
+        return sqrt(varianceWad * WAD);
+    }
+
+    /// @notice Integer square root. Returns floor(sqrt(x)) for every uint256.
+    ///
+    /// @dev Babylonian iteration. The initial guess is `2^floor((bitlen-1)/2)`, which is at
+    /// or BELOW sqrt(x) — never above it — so the first step overshoots and the sequence
+    /// descends from there. An earlier comment claimed the guess was an upper bound and
+    /// that convergence was monotone downward throughout; both statements were false,
+    /// though the function was correct regardless.
+    ///
+    /// Correctness: the initial relative error is at most 2x, so after one step it is at
+    /// most 1/4, and Newton squares the error each step (2^-2 -> 2^-4 -> ... -> 2^-128
+    /// after six further steps), below one ULP for any sqrt(x) < 2^128. The final
+    /// `min(y, x/y)` resolves the known s <-> s+1 oscillation.
     function sqrt(uint256 x) internal pure returns (uint256 y) {
         if (x == 0) return 0;
-        // Initial guess: 2^(ceil(bitlen/2)) is always >= sqrt(x), which guarantees the
-        // Babylonian iteration converges monotonically downward to floor(sqrt(x)).
         uint256 z = x;
         y = 1;
         if (z >= 0x100000000000000000000000000000000) {
@@ -118,10 +152,10 @@ library Volatility {
             z >>= 4;
             y <<= 2;
         }
-        if (z >= 0x4) y <<= 1;
+        if (z >= 0x4) {
+            y <<= 1;
+        }
 
-        // Seven iterations are sufficient for a 256-bit input from this starting point.
-        // Each step is exact integer arithmetic; no overflow is possible because y <= x.
         unchecked {
             y = (y + x / y) >> 1;
             y = (y + x / y) >> 1;

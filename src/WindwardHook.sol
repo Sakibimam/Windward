@@ -48,14 +48,16 @@ contract WindwardHook is IHooks {
     struct PoolState {
         uint256 varianceWad; // EWMA of tick^2 per second, WAD-scaled
         int24 lastTick; // tick at the previous observation
-        uint32 lastTimestamp; // block.timestamp at the previous observation
+        uint32 lastTimestamp; // block.timestamp at the previous TIMESTAMPED observation
         bool initialized;
     }
 
     error NotPoolManager();
     error PoolMustUseDynamicFee();
     error InvalidFeeBounds();
-    error InvalidAlpha();
+    error InvalidHalfLife();
+    error InvalidFeePerSigma();
+    error NotInitialized();
     error HookAddressMustNotReturnDeltas();
 
     /// @notice Emitted whenever the volatility estimate is updated.
@@ -73,8 +75,10 @@ contract WindwardHook is IHooks {
     /// @notice Pips of fee added per unit of sigma (ticks per sqrt(second)).
     uint256 public immutable feePerSigma;
 
-    /// @notice EWMA smoothing factor, WAD-scaled, in (0, 1e18].
-    uint256 public immutable alphaWad;
+    /// @notice Seconds over which an old variance estimate loses half its weight.
+    /// Decay is by elapsed TIME, so a quiet pool releases its fee ceiling on its own and
+    /// same-block dust swaps cannot wash the estimate out.
+    uint256 public immutable halfLife;
 
     mapping(PoolId => PoolState) private _state;
 
@@ -83,25 +87,47 @@ contract WindwardHook is IHooks {
         _;
     }
 
-    constructor(IPoolManager _poolManager, uint24 _feeMin, uint24 _feeMax, uint256 _feePerSigma, uint256 _alphaWad) {
-        // The whole security argument rests on this hook being unable to move funds. Enforce it
-        // at construction so a mis-mined address cannot be deployed and then discovered later.
-        if (
-            uint160(address(this))
-                    & (Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG
-                        | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG
-                        | Hooks.AFTER_ADD_LIQUIDITY_RETURNS_DELTA_FLAG
-                        | Hooks.AFTER_REMOVE_LIQUIDITY_RETURNS_DELTA_FLAG) != 0
-        ) revert HookAddressMustNotReturnDeltas();
+    constructor(IPoolManager _poolManager, uint24 _feeMin, uint24 _feeMax, uint256 _feePerSigma, uint256 _halfLife) {
+        // Enforce the FULL permission set against the deployed address, not just the four
+        // returns-delta bits. Checking only those left three silent failure modes: deployed
+        // without BEFORE_SWAP_FLAG a dynamic-fee pool falls back to slot0.lpFee, which v4
+        // seeds to 0, so every swap would be fee-free forever; without AFTER_SWAP_FLAG the
+        // estimator never updates; and any EXTRA action flag routes v4 into one of the
+        // reverting stubs below, bricking every modifyLiquidity and donate on the pool.
+        Hooks.validateHookPermissions(
+            IHooks(address(this)),
+            Hooks.Permissions({
+                beforeInitialize: false,
+                afterInitialize: true,
+                beforeAddLiquidity: false,
+                afterAddLiquidity: false,
+                beforeRemoveLiquidity: false,
+                afterRemoveLiquidity: false,
+                beforeSwap: true,
+                afterSwap: true,
+                beforeDonate: false,
+                afterDonate: false,
+                beforeSwapReturnDelta: false,
+                afterSwapReturnDelta: false,
+                afterAddLiquidityReturnDelta: false,
+                afterRemoveLiquidityReturnDelta: false
+            })
+        );
 
-        if (_feeMin > _feeMax || _feeMax > LPFeeLibrary.MAX_LP_FEE) revert InvalidFeeBounds();
-        if (_alphaWad == 0 || _alphaWad > Volatility.WAD) revert InvalidAlpha();
+        // feeMax must stay STRICTLY below MAX_LP_FEE. At exactly 100%, Pool.sol reverts
+        // InvalidFeeForExactOut on every exact-output swap — the Universal Router's "buy
+        // exactly N" path, i.e. ordinary retail — until the estimate decays.
+        if (_feeMin > _feeMax || _feeMax >= LPFeeLibrary.MAX_LP_FEE) revert InvalidFeeBounds();
+        if (_halfLife == 0 || _halfLife > Volatility.MAX_DT) revert InvalidHalfLife();
+        // Bound the premium so `sigmaWad * feePerSigma` cannot overflow and permanently
+        // brick the swap path. sigmaWad <= sqrt(MAX_OBSERVATION*WAD*WAD) = 1e22.
+        if (_feePerSigma > type(uint128).max) revert InvalidFeePerSigma();
 
         poolManager = _poolManager;
         feeMin = _feeMin;
         feeMax = _feeMax;
         feePerSigma = _feePerSigma;
-        alphaWad = _alphaWad;
+        halfLife = _halfLife;
     }
 
     /// @notice The current fee this hook would charge the given pool, in pips.
@@ -110,9 +136,9 @@ contract WindwardHook is IHooks {
         return _feeFor(_state[poolId].varianceWad);
     }
 
-    /// @notice Current volatility estimate for a pool, in ticks per sqrt(second).
-    function currentSigma(PoolId poolId) external view returns (uint256) {
-        return Volatility.sigma(_state[poolId].varianceWad);
+    /// @notice Current volatility estimate, WAD-scaled, in ticks per sqrt(second).
+    function currentSigmaWad(PoolId poolId) external view returns (uint256) {
+        return Volatility.sigmaWad(_state[poolId].varianceWad);
     }
 
     function getPoolState(PoolId poolId) external view returns (PoolState memory) {
@@ -124,15 +150,18 @@ contract WindwardHook is IHooks {
     /// that is slightly too low costs LPs revenue; a fee that is too high can push honest flow
     /// out of the pool, which is the worse failure.
     function _feeFor(uint256 varianceWad) internal view returns (uint24) {
-        uint256 s = Volatility.sigma(varianceWad);
+        // sigma is carried WAD-scaled so the premium keeps its fractional part. Computing
+        // sqrt(varianceWad / WAD) instead truncated twice and quantised the fee onto a
+        // 200-pip ladder whose first rung was 40% of the entire fee floor.
+        uint256 s = Volatility.sigmaWad(varianceWad);
 
-        // sigma is bounded by sqrt(MAX_OBSERVATION) = 1e6, and feePerSigma is set at deployment,
-        // so this product cannot realistically overflow; the clamp below makes it safe regardless.
-        uint256 premium = s * feePerSigma;
+        // sigmaWad <= 1e22 and feePerSigma <= uint128.max (constructor), so the product is
+        // at most ~3.4e60 — no overflow. The clamp below bounds the result regardless.
+        uint256 premium = (s * feePerSigma) / Volatility.WAD;
         uint256 fee = uint256(feeMin) + premium;
         if (fee > feeMax) fee = feeMax;
         // casting to 'uint24' is safe because fee is clamped above to feeMax, and the
-        // constructor rejects feeMax > LPFeeLibrary.MAX_LP_FEE (1e6), which is < 2^24.
+        // constructor rejects feeMax >= LPFeeLibrary.MAX_LP_FEE (1e6), which is < 2^24.
         // forge-lint: disable-next-line(unsafe-typecast)
         return uint24(fee);
     }
@@ -186,19 +215,34 @@ contract WindwardHook is IHooks {
     {
         PoolId id = key.toId();
         PoolState storage st = _state[id];
+        // afterInitialize always runs before any swap (AFTER_INITIALIZE_FLAG is enforced in
+        // the constructor and Pool.initialize cannot run twice), so this should be
+        // unreachable. It is asserted rather than assumed because the alternative is
+        // folding the gap from tick 0 into the estimator as if it were a real return.
+        if (!st.initialized) revert NotInitialized();
+
+        // block.timestamp is monotonic and lastTimestamp is derived from it, so no underflow.
+        uint256 dt = block.timestamp - st.lastTimestamp;
+
+        // dt == 0: no time has elapsed, so there is no variance-per-unit-time to measure.
+        // Return WITHOUT advancing lastTick/lastTimestamp. The anchor stays put, so a price
+        // move split across same-block slices is not erased — it is measured in full against
+        // the next observation that does have elapsed time. This is what closes the
+        // dust-swap suppression attack: same-block swaps cannot move the estimate at all.
+        if (dt == 0) return (IHooks.afterSwap.selector, int128(0));
 
         (, int24 tickNow,,) = poolManager.getSlot0(id);
 
-        // block.timestamp is monotonic, so this cannot underflow.
-        uint256 dt = block.timestamp - st.lastTimestamp;
-
-        uint256 newVariance = Volatility.update(st.varianceWad, st.lastTick, tickNow, dt, alphaWad);
+        uint256 newVariance = Volatility.update(st.varianceWad, st.lastTick, tickNow, dt, halfLife);
 
         st.varianceWad = newVariance;
         st.lastTick = tickNow;
         st.lastTimestamp = uint32(block.timestamp);
 
-        emit VolatilityUpdated(id, newVariance, Volatility.sigma(newVariance), _feeFor(newVariance));
+        // Compute the fee once and reuse it; sqrt is not cheap and an earlier version ran it
+        // three times per swap purely to populate this event.
+        uint24 feeNow = _feeFor(newVariance);
+        emit VolatilityUpdated(id, newVariance, Volatility.sigmaWad(newVariance), feeNow);
 
         // Zero: this hook never takes a delta.
         return (IHooks.afterSwap.selector, int128(0));

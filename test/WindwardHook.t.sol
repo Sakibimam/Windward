@@ -27,7 +27,7 @@ contract WindwardHookTest is Test, Deployers {
     uint24 internal constant FEE_MIN = 500; // 0.05%
     uint24 internal constant FEE_MAX = 10_000; // 1.00%
     uint256 internal constant FEE_PER_SIGMA = 200; // pips of fee per tick/sqrt(s)
-    uint256 internal constant ALPHA = 3e17; // 0.3
+    uint256 internal constant HALF_LIFE = 300; // seconds
 
     uint24 internal constant STATIC_FEE = 500; // matches FEE_MIN for a fair baseline
 
@@ -42,7 +42,7 @@ contract WindwardHookTest is Test, Deployers {
         address hookAddr = address(uint160(type(uint160).max & clearAllHookPermissionsMask) | FLAGS);
         deployCodeTo(
             "WindwardHook.sol:WindwardHook",
-            abi.encode(IPoolManager(address(manager)), FEE_MIN, FEE_MAX, FEE_PER_SIGMA, ALPHA),
+            abi.encode(IPoolManager(address(manager)), FEE_MIN, FEE_MAX, FEE_PER_SIGMA, HALF_LIFE),
             hookAddr
         );
         hook = WindwardHook(hookAddr);
@@ -105,7 +105,7 @@ contract WindwardHookTest is Test, Deployers {
 
     function test_calmPoolChargesFeeMin() public view {
         assertEq(hook.currentFee(dynKey.toId()), FEE_MIN, "an untouched pool must charge the floor");
-        assertEq(hook.currentSigma(dynKey.toId()), 0, "sigma starts at zero");
+        assertEq(hook.currentSigmaWad(dynKey.toId()), 0, "sigma starts at zero");
     }
 
     function test_feeRisesWithRealisedVolatility() public {
@@ -151,12 +151,16 @@ contract WindwardHookTest is Test, Deployers {
     }
 
     // ===================================================================================
-    // THE HEADLINE: identical flow through a static-fee pool and a Windward pool
+    // SANITY CHECK - NOT EVIDENCE.
+    //
+    // This forces IDENTICAL volume through both pools and then observes that the pool
+    // charging a higher fee collected more fees. That is arithmetic, not a finding: it
+    // proves 10000 > 500. It models no demand elasticity, no LP PnL, and no counterfactual
+    // for the flow that would have left at the higher fee. It must never be presented as
+    // evidence that Windward improves LP outcomes. See docs/WINDWARD_DESIGN.md, Limitations.
     // ===================================================================================
 
-    /// @notice Fee growth per unit of liquidity is directly comparable because both pools are
-    /// seeded with identical liquidity over an identical range at an identical starting price.
-    function test_windwardEarnsMoreThanStaticFeeOnVolatileFlow() public {
+    function test_sanity_higherFeeOnIdenticalVolumeCollectsMoreFees() public {
         int256[8] memory sizes = [int256(-5e17), -4e17, -6e17, -5e17, int256(-5e17), -4e17, -6e17, -5e17];
 
         for (uint256 i = 0; i < sizes.length; i++) {
@@ -175,7 +179,7 @@ contract WindwardHookTest is Test, Deployers {
         emit log_named_uint("final windward fee (pips)", hook.currentFee(dynKey.toId()));
         emit log_named_uint("static fee (pips)", STATIC_FEE);
 
-        assertGt(dyn0 + dyn1, sta0 + sta1, "Windward must out-earn a static fee on volatile flow");
+        assertGt(dyn0 + dyn1, sta0 + sta1, "sanity: a higher fee on identical forced volume collects more");
     }
 
     /// @notice The other half of the claim, and the one that is easy to get wrong: on calm flow
@@ -210,31 +214,62 @@ contract VolatilityLibTest is Test {
     }
 
     function test_updateIsZeroForNoPriceMove() public pure {
-        assertEq(Volatility.update(0, 100, 100, 10, 3e17), 0, "no move => no variance");
+        assertEq(Volatility.update(0, 100, 100, 10, 300), 0, "no move => no variance");
     }
 
     function test_updateGrowsWithLargerMove() public pure {
-        uint256 small = Volatility.update(0, 0, 10, 1, 1e18);
-        uint256 large = Volatility.update(0, 0, 100, 1, 1e18);
+        uint256 small = Volatility.update(0, 0, 10, 1, 1);
+        uint256 large = Volatility.update(0, 0, 100, 1, 1);
         assertGt(large, small, "a bigger tick move must produce more variance");
     }
 
-    /// @notice A same-timestamp burst must not produce an unbounded spike; MIN_DT clamps it.
-    function test_updateHandlesZeroElapsedTime() public pure {
-        uint256 v = Volatility.update(0, 0, 50, 0, 1e18);
-        assertEq(v, Volatility.update(0, 0, 50, 1, 1e18), "dt=0 must clamp to MIN_DT");
+    /// @notice W-01's fix, at the library level: dt == 0 carries no information about
+    /// variance per unit time, so the estimate must be returned unchanged.
+    function test_updateIsAnIdentityWhenNoTimeElapsed() public pure {
+        assertEq(Volatility.update(12345e18, 0, 5000, 0, 300), 12345e18, "dt==0 must not change the estimate");
+        assertEq(Volatility.update(0, 0, 5000, 0, 300), 0, "dt==0 must not change the estimate");
+    }
+
+    /// @notice W-03's fix: the observation must survive when dTick^2 < dt, which is the
+    /// common case on real Unichain flow (1-6 tick moves over 1-13 seconds).
+    function test_smallMovesOverLongGapsSurvive() public pure {
+        // dTick=2, dt=25 -> integer (dTick^2)/dt would be 0. WAD scaling must preserve it.
+        uint256 v = Volatility.update(0, 0, 2, 25, 300);
+        assertGt(v, 0, "W-03 CLOSED: a 2-tick move over 25s must not round to zero");
+        assertGt(Volatility.sigmaWad(v), 0, "and sigma must be non-zero");
+    }
+
+    function test_decayFactorIsMonotoneAndHalves() public pure {
+        assertEq(Volatility.decayFactor(0, 300), Volatility.WAD, "dt=0 retains everything");
+        assertEq(Volatility.decayFactor(300, 300), Volatility.WAD / 2, "one half-life halves it");
+        assertEq(Volatility.decayFactor(600, 300), Volatility.WAD / 4, "two half-lives quarter it");
+        assertEq(Volatility.decayFactor(300 * 64, 300), 0, "64 half-lives is zero at WAD precision");
+        assertEq(Volatility.decayFactor(100, 0), 0, "a zero half-life decays instantly");
+    }
+
+    function testFuzz_decayFactorIsMonotoneNonIncreasing(uint256 dt1, uint256 dt2, uint256 hl) public pure {
+        hl = bound(hl, 1, 7 days);
+        dt1 = bound(dt1, 0, 7 days);
+        dt2 = bound(dt2, dt1, 7 days);
+        assertGe(Volatility.decayFactor(dt1, hl), Volatility.decayFactor(dt2, hl), "longer gap must never retain more");
+    }
+
+    function testFuzz_decayFactorIsBounded(uint256 dt, uint256 hl) public pure {
+        hl = bound(hl, 1, 7 days);
+        dt = bound(dt, 0, 30 days);
+        assertLe(Volatility.decayFactor(dt, hl), Volatility.WAD, "decay factor cannot exceed 1");
     }
 
     function test_observationIsCapped() public pure {
-        uint256 huge = Volatility.update(0, type(int24).min, type(int24).max, 1, 1e18);
+        uint256 huge = Volatility.update(0, type(int24).min, type(int24).max, 1, 300);
         assertLe(huge / Volatility.WAD, Volatility.MAX_OBSERVATION, "observation cap must hold");
     }
 
-    function testFuzz_varianceNeverExceedsCap(uint256 v0, int24 a, int24 b, uint256 dt, uint256 alpha) public pure {
+    function testFuzz_varianceNeverExceedsCap(uint256 v0, int24 a, int24 b, uint256 dt, uint256 hl) public pure {
         v0 = bound(v0, 0, Volatility.MAX_OBSERVATION * Volatility.WAD);
         dt = bound(dt, 0, 1e6);
-        alpha = bound(alpha, 1, Volatility.WAD);
-        uint256 v1 = Volatility.update(v0, a, b, dt, alpha);
+        hl = bound(hl, 1, 7 days);
+        uint256 v1 = Volatility.update(v0, a, b, dt, hl);
         assertLe(v1 / Volatility.WAD, Volatility.MAX_OBSERVATION, "EWMA must stay under the cap");
     }
 }
