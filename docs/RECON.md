@@ -670,8 +670,11 @@ $ cast call 0x86e8631a016f9068c3f085faf484ee3f5fdee8f2 "poolManager()(address)" 
 `FACT` `StateView.poolManager()` returns the same address the docs list for PoolManager. Two
 independent sources agree.
 
-`UNVERIFIED` The Unichain Sepolia addresses. They were read from the same documentation page but
-have **not** been checked on-chain. Verify before any testnet deployment in Phase 10.
+> **Verified 2026-08-28 (Block 6 prep).** `cast chain-id` -> **1301**. PoolManager
+> `0x00b036b58a818b1bc34d502d3fe730db729e62ac` has 48021 hex chars of code, and **two
+> independent deployed contracts confirm it**: `StateView(0xc199f107...).poolManager()` and
+> `PositionManager(0xf969aee6...).poolManager()` both return
+> `0x00B036B58a818B1BC34d502D3fE730Db729e62AC`. No longer `UNVERIFIED`.
 
 `UNVERIFIED` `0x2BAD8182C09F50c8318d769245beA52C32Be46CD` — the PoolManager owner. Not yet
 identified. It matters for the threat model (the owner controls protocol fees), so Phase 1

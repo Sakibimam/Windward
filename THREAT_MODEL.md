@@ -1,126 +1,77 @@
-# THREAT_MODEL.md — Keel
+# THREAT_MODEL.md — Windward
 
-Analysis. `SECURITY.md` holds the policy that follows from it.
+**Rewritten 2026-08-28.** The previous version enumerated V1–V20 against Keel, a runtime
+accounting guard that no longer exists. Those vectors do not apply to a fee-setting hook and
+were misleading a reviewer into checking the wrong properties.
 
-**Status: Phase 0 skeleton.** The protocol-level attack vectors below are stated at the level of
-detail Phase 0 supports. Phase 4 (invariant design) and Phase 7 (adversarial testing) must
-expand §4 and §5 substantially. Anything not yet analysed is marked `UNVERIFIED` rather than
-assumed safe.
+`SECURITY.md` holds the policy; this file holds the analysis.
 
 ---
 
 ## 1. Assets
 
-What an attacker is trying to obtain or destroy.
-
-| # | Asset | Held by | Loss looks like |
-|---|---|---|---|
-| A1 | Tokens backing the guarded hook's share claims | PoolManager / the hook | Claims redeemable for more than their backing; last redeemers get nothing. |
-| A2 | The integrity of the hook's share↔asset accounting | The hook | Corrupted state that still settles cleanly at the PoolManager. **This is Keel's target.** |
-| A3 | Availability of withdrawals | The hook + Keel | **Keel itself can destroy this.** A false positive freezes user funds. Treated as a first-class asset, not an afterthought. |
-| A4 | Deployment credentials | The owner's Foundry keystore | Malicious deployment or upgrade under our identity. |
-| A5 | The project's evidentiary claims | This repo | A false `FACT` propagating into a deployed decision. |
+| # | Asset | Loss looks like |
+|---|---|---|
+| A1 | LP fee revenue | The fee sits below what the pool's risk warrants, or the pool is drained of flow. |
+| A2 | **Pool usability** | The fee is driven high enough that honest swappers route elsewhere. **This is the dominant harm.** |
+| A3 | Swapper funds in flight | Not reachable — Windward cannot move tokens (`SECURITY.md` §2). |
+| A4 | The integrity of the study's numbers | A false statistic shipped as a `FACT`. Three such errors already occurred (D-0017). |
 
 ## 2. Attackers
 
-| # | Attacker | Capability | Motive |
+| # | Attacker | Capability | Goal |
 |---|---|---|---|
-| T1 | Economic attacker | Arbitrary calls, arbitrary ordering, flash loans, repetition, sandwiching. Can call the hook thousands of times in one transaction. | Extract A1. |
-| T2 | Griefer | Same access, no profit requirement | Destroy A3 — make Keel revert on honest users. |
-| T3 | Malicious hook author | Writes the guarded hook; Keel is integrated into code they control | Make Keel appear to endorse an unsafe hook. |
-| T4 | Malicious token | Controls an ERC-20 in the pool; can reenter, rebase, take fees on transfer, lie about balances | Corrupt Keel's view of "assets" (A2). |
-| T5 | Compromised developer machine | Local file and network access | A4, and injecting a false `FACT` into A5. |
-| T6 | **Us** | Full write access, time pressure, stale training data | Every asset. Empirically the most active threat so far — see D-0009, D-0010. |
+| T1 | Fee suppressor | Trades to push the estimate down, then trades large at the floor | Underpay LPs |
+| T2 | Fee inflater / griefer | Trades to push the estimate up | Make the pool uncompetitive; deny LPs flow (A2) |
+| T3 | Ordinary whale | One large legitimate swap | No malice — but can inflict T2's effect by accident |
+| T4 | **Us** | Time pressure, unverified assumptions, uncommitted analysis scripts | A4. Empirically the most active threat in this project. |
 
-## 3. Trust boundaries
+## 3. Vectors
 
-See `SECURITY.md` §2 for the table. The critical boundary: **the guarded hook's accounting is
-untrusted input to Keel.** Keel must never derive its notion of "assets" from a number the
-guarded hook simply asserts, or it is checking a value against itself.
+### Closed, each pinned by a regression test in `test/WindwardAttack.t.sol`
 
-`UNVERIFIED` What Keel can read that is *not* under the hook's control — PoolManager state via
-`StateLibrary`, raw token balances, and little else — is a Phase 4 question and constrains which
-invariants are expressible at all. **This is the single most important open question in the
-threat model.**
+| # | Vector | Was | Now |
+|---|---|---|---|
+| V1 | **Dust-swap fee suppression** (T1). Decay ran per observation, so N no-move swaps multiplied the estimate by (1−α)^N. | 30 dust swaps in one block: fee **10000 → 500**, a 20× suppression, for gas. Same transaction as the trade it defeated. | Decay is by elapsed time; `dt == 0` is an identity. Same-block swaps cannot move the fee at all. |
+| V2 | **Ceiling pinned indefinitely** (T2/T3). No time decay existed. | One ordinary swap pinned the pool at 1% and it was **still there seven days later**. | The estimate decays on wall-clock time; the ceiling releases with no trading required. |
+| V3 | **Same-block slicing to hide a move** (T1). | — | The anchor does not advance on `dt == 0`, so a sliced move is measured in full at the next timestamped observation. |
+| V4 | **Silent mis-deployment** (F-1). Only the returns-delta bits were checked. | Missing `BEFORE_SWAP_FLAG` → a dynamic-fee pool falls back to `slot0.lpFee` = 0 → **every swap fee-free forever, silently**. An extra action flag → every `modifyLiquidity` reverts, bricking the pool permanently. | `Hooks.validateHookPermissions` with the full 14-flag set, in the constructor. |
+| V5 | **Exact-output DoS** (W-06). | `feeMax == MAX_LP_FEE` → `Pool.sol` reverts `InvalidFeeForExactOut` on every exact-output swap — the Universal Router's retail path. | Constructor rejects `feeMax >= MAX_LP_FEE`. |
+| V6 | **Signal destroyed by truncation** (W-03). | `sq/dt` then `sqrt(var/WAD)` truncated twice. Measured over 426,807 real swaps: **44.9–79.6%** of observations rounded to zero and the fee sat at its floor on **20.6–79.5%** of swaps. (An earlier 50-minute sample gave 52–85% / 80–96%; superseded by D-0020.) | WAD scaling is carried through; resolution is 1 pip. |
+| V7 | Unbounded `feePerSigma` → overflow panic on the swap path (W-07). | Unvalidated. | Bounded in the constructor. |
 
-## 4. Attack vectors
+### Open — accepted, not fixed
 
-### 4.1 Against the guarded protocol (what Keel is meant to catch)
+| # | Vector | Why accepted |
+|---|---|---|
+| V8 | **The tick is steerable.** Anyone can raise a pool's fee by trading it. | Irreducible: the signal *is* the price. Bounded by `MAX_OBSERVATION` (now 1e8, previously an inert 1e12) and by time decay. The attacker pays their own price impact. **Not eliminated.** |
+| V9 | **The fee is set from pre-swap state.** The trader who moves the price pays the old fee; the next trader pays the elevated one. | Unfixable without predicting the move before it happens. Shared by every reactive dynamic fee. Stated plainly in `SECURITY.md` §5 rather than hidden. |
+| V10 | **The estimator conflates transient and permanent impact.** LVR depends on the permanent component; realised pool variance also contains noise-trader impact, which LPs profit from. | Not resolved. It is the core open economic objection (D-0019) and the reason the LP-benefit claim is labelled unvalidated. |
+| V11 | v4 stores the post-swap tick off by one in a direction-dependent way (`Pool.sol:409-412, :431`), so a round trip can register a spurious ±1 tick. | Bounded and small after the W-03 fix, but real on a 1-second-block chain. Not corrected. |
+| V12 | Gas overhead per swap (one `extsload`, two SSTOREs, one `sqrt`, one event). | **Measured: 11,192 gas, ~15% of an unhooked swap** (`test/WindwardGas.t.sol`, interleaved 5-run average on warm storage). The `dt == 0` path costs 65,098 vs 143,581. No longer open. |
+
+### Process vectors
 
 | # | Vector | Status |
 |---|---|---|
-| V1 | Rounding-direction error compounded over many repetitions to corrupt accounting, then extracted via a swap. | `UNVERIFIED` — the motivating class. Phase 3 must establish it from primary sources. |
-| V2 | Mint claims without depositing matching assets. | `UNVERIFIED` — Phase 4. |
-| V3 | Burn claims and withdraw more assets than backing. | `UNVERIFIED` — Phase 4. |
-| V4 | Donation / direct transfer that inflates apparent backing, then a claim against it. First-depositor share inflation is the classic instance. | `UNVERIFIED` — Phase 4. |
-| V5 | Reentrancy through a token callback, observing or acting on a half-updated share↔asset state. | `UNVERIFIED` — Phase 4/7. |
-| V6 | Fee-on-transfer or rebasing token making "assets received" ≠ "assets credited". | `UNVERIFIED` — Phase 4 must state whether these are in scope. |
+| V13 | Analysis code not committed → statistics unreproducible and uncheckable. | **Occurred, three times** (D-0017). Closed: `analysis/` is committed, one command reproduces every number, and `analysis/test_decode.py` plus `test/SwapEventConvention.t.sol` pin the two specific decode bugs. |
+| V14 | A comment asserting a security property the code does not have. | **Occurred, three times** — `MIN_DT`, `MAX_OBSERVATION`, and the `sqrt` convergence argument. All three rewritten. Reviewers relied on them. |
+| V15 | A tautological test presented as evidence. | **Occurred.** Relabelled `test_sanity_higherFeeOnIdenticalVolumeCollectsMoreFees`, with a comment stating it proves `10000 > 500`. |
 
-### 4.2 Against Keel itself (what Keel might cause)
+## 4. Explicitly accepted risks
 
-| # | Vector | Severity | Status |
-|---|---|---|---|
-| V7 | **False positive freezes withdrawals.** A legitimate sequence trips the invariant and users cannot exit. | **Critical.** Worse than the bug Keel prevents. An explicit kill condition. | Open. Phase 4 enumerates legitimate scenarios; Phase 7 fuzzes for them. |
-| V8 | Griefer engineers a cheap state that makes Keel revert for everyone else (T2). | **Critical** — same outcome as V7, reached deliberately. | Open, Phase 7. |
-| V9 | Keel reads a value the attacker controls and is fooled into passing. Evasion. | High | Open, Phase 4. |
-| V10 | Gas overhead makes guarded pools uncompetitive, or pushes a swap path over the block gas limit. | Medium, and a kill condition if unreasonable. | Phase 9 measures it. |
-| V11 | Keel's own arithmetic has a rounding or overflow bug. | High | Mitigated by `.claude/rules/solidity.md` + review chain. Not yet tested. |
-| V12 | Hook address mined against default-profile bytecode but deployed from `via_ir` bytecode → permission bits do not match the deployed code. | High, deployment-breaking | **Mitigated by design:** D-0006 mandates `FOUNDRY_PROFILE=deploy`; on the `release-check` list. |
-| V13 | Keel accidentally returns a non-zero delta and alters accounting. | **Critical** | **Mitigated by design:** returns-delta address bits must be clear, asserted by test in Phase 6. `SECURITY.md` §1. |
-| V14 | Unbounded loop on the swap path enables gas-limit DoS. | High | Prohibited by rule. Not yet enforced by test. |
+- **R1 — Not audited.** Hackathon prototype. Must not secure real funds.
+- **R2 — The economic claim is unvalidated.** Windward may not improve LP outcomes at all. See
+  D-0019 for exactly what evidence is missing.
+- **R3 — `feePerSigma` has no derivation.** It is a free parameter chosen by the deployer, and a
+  bad choice is unrecoverable because the contract is immutable.
+- **R4 — Uniswap v4 core is trusted.** Not audited by us.
+- **R5 — The study samples a public RPC.** Rate limits and endpoint behaviour could bias
+  collection; `analysis/fetch.py` caches per chunk and pins the end block so a run is
+  reproducible, but the underlying node is trusted.
 
-### 4.3 Against the development process
+## 5. What would change the picture
 
-| # | Vector | Status |
-|---|---|---|
-| V15 | Stale training data produces a plausible but wrong API, address, or signature. | **Mitigated:** verify-from-source rule; `docs/RECON.md` §6.2 already caught `SwapParams` moving and `BaseHook` being absent. Ongoing. |
-| V16 | Transcription error puts a wrong value into an evidence file. | **Occurred** — D-0009. Mitigation: never hand-transcribe; redirect output to file. |
-| V17 | A verified fact is not persisted to the artifact a future session inherits. | **Occurred** — D-0010 (stale submodule index). Mitigation: `git submodule status` in the pre-commit checklist. |
-| V18 | Secret exfiltration via a subprocess that Claude Code's Read/Edit deny rules do not cover. | **Accepted risk — see §6.** |
-| V19 | A hook or permission rule so brittle it breaks normal development, and gets disabled wholesale — losing all protection. | Mitigated by keeping hooks few, simple, and tested (`docs/RECON-guard-hook.md`). |
-| V20 | Owner cannot audit the code, so an error ships silently. | **Structural, unmitigable by the owner.** The review chain and this file are the compensating control. |
-
-## 5. Mitigations map
-
-| Threat | Control | Type |
-|---|---|---|
-| V13 | Returns-delta address bits clear; asserted by test | Preventive, testable |
-| V12 | `FOUNDRY_PROFILE=deploy` for mining + deploy | Procedural, on checklist |
-| V7, V8 | Phase 4 false-positive enumeration; Phase 7 fuzz + invariant runs | Detective → kill signal |
-| V11, V14 | `.claude/rules/solidity.md`; `security-reviewer` | Preventive |
-| V9 | `adversarial-reviewer`, whose sole job is to argue Keel is wrong | Detective |
-| A4 | Keystore-only keys; `deny` rules on `.env`; `ask` on any broadcast | Preventive |
-| A5 | FACT/INFERENCE/HYPOTHESIS/UNVERIFIED tagging; `docs/RECON.md` as evidence of record | Detective |
-| T6 | The entire rule set in `CLAUDE.md` | Preventive |
-
-## 6. Explicitly accepted risks
-
-Accepted deliberately. Each is a decision, not an oversight.
-
-- **R1 — `.env` protection is incomplete.** `FACT` Claude Code's `Read`/`Edit` deny rules cover
-  the built-in file tools and the file commands it recognises in Bash (`cat`, `head`, `tail`,
-  `sed`), but **not** an arbitrary subprocess (a Python or Node script that opens the file).
-  Accepted because closing it fully would mean denying `Bash` outright, which makes the project
-  undeliverable. Compensating control: no real secret is in `.env` until Phase 10, and
-  deployment keys live in the keystore, never in `.env`.
-- **R2 — Uniswap v4 core is trusted.** Not audited by us. Accepted: it is the platform.
-- **R3 — Public RPC is trusted for reads.** `https://mainnet.unichain.org` could serve false
-  state. Accepted for research; the PoolManager address was cross-checked against a second
-  contract's `poolManager()` (`docs/RECON.md` §7). Any address used in a deployment must be
-  re-verified from at least two independent sources.
-- **R4 — Not audited.** Time-boxed prototype. Must not secure real funds. Stated in the README.
-- **R5 — Historical decisions D-0001/D-0002 rest on unverified reasoning.** Accepted because
-  both are decisions *not* to build something; nothing downstream depends on them being exactly
-  right. Revisit only if either direction is revived.
-
-## 7. Unresolved threats
-
-Open. Not accepted, not mitigated — **must** be closed before any claim that Keel works.
-
-- **U1** Whether a false-positive rate near zero is achievable at all (V7). Kill condition.
-- **U2** What Keel can read that is not attacker-controlled (§3). Determines expressibility.
-- **U3** Whether rebasing and fee-on-transfer tokens are in scope, or an explicit limitation.
-- **U4** Whether the invariant is evadable by an attacker who knows it (V9).
-- **U5** Real gas cost (V10).
-- **U6** `UNVERIFIED` Identity of the Unichain PoolManager owner,
-  `0x2BAD8182C09F50c8318d769245beA52C32Be46CD`. It controls protocol fees. Phase 1.
+An LP-PnL comparison with an explicit demand-elasticity assumption, and a decomposition showing
+the fee tracks the permanent rather than the transient component of price impact. Until then V10
+stands and the honest description of Windward is a heuristic with an unvalidated benefit.

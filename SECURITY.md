@@ -1,141 +1,112 @@
-# SECURITY.md — Keel
+# SECURITY.md — Windward
 
-Policy. `THREAT_MODEL.md` holds the analysis; this file holds the rules that follow from it.
+**This file was rewritten on 2026-08-28.** It previously described Keel, a runtime accounting
+guard that no longer exists (killed in `DECISIONS.md` D-0013). Windward is a different thing with
+a different risk profile, and the old properties do not transfer.
 
 ---
 
-## 1. The governing security property
+## 1. What Windward is
 
-> **Keel observes and reverts. It never touches accounting.**
+A Uniswap v4 hook that sets the LP fee per swap from a time-decayed estimate of the pool's own
+realised tick variance. It reads `slot0`, writes two storage slots, and returns a fee.
 
-Every other rule here serves that one. Keel is a guard placed in the path of user funds. A guard
-that can move funds, or that can wrongly refuse to let funds move, is a larger hazard than the
-bug it was installed to prevent.
+**It is a heuristic.** It is motivated by the observation that loss-versus-rebalancing grows with
+price variance. It is **not** an implementation of any optimal policy from the stochastic-control
+literature, and the claim that it improves LP outcomes is **unvalidated** (`DECISIONS.md` D-0019).
+The word *optimal* may not be used to describe it.
 
-Concretely:
+## 2. The governing property
 
-- Keel's hook callbacks return **zero deltas**. `returnDelta = false`, always.
-- `INFERENCE` This is enforceable at the **address** level: the hook address must have
-  `BEFORE_SWAP_RETURNS_DELTA_FLAG`, `AFTER_SWAP_RETURNS_DELTA_FLAG`,
-  `AFTER_ADD_LIQUIDITY_RETURNS_DELTA_FLAG`, and `AFTER_REMOVE_LIQUIDITY_RETURNS_DELTA_FLAG`
-  (address bits 3, 2, 1, 0) **clear**. Source: `docs/RECON.md` §6.1.
-- Phase 6 must **assert this in a test**, not merely document it. A comment is not a control.
-- Keel holds no token balances and has no token-transfer path.
+> **Windward cannot move funds. It can only price them.**
 
-## 2. Trust boundaries
+This is narrower than the property the old Keel document asserted, and the difference matters.
 
-| Boundary | Trusted? | Notes |
-|---|---|---|
-| Uniswap v4 `PoolManager` | **Trusted** | Assumed correct. Verified deployment, `docs/RECON.md` §7. If v4 is broken, Keel cannot help. |
-| The guarded hook's own accounting | **Untrusted** | This is the thing Keel is checking. Never assume it is self-consistent. |
-| Pool tokens (ERC-20s) | **Untrusted** | Rebasing, fee-on-transfer, reentrant (ERC-777-style), missing return values, >18 decimals, revert-on-zero-transfer. Phase 4 must state which are in scope. |
-| Swappers / LPs / arbitrageurs | **Untrusted** | Fully adversarial and able to order, repeat, and sandwich their own calls. |
-| The hook's deployer/operator | **Untrusted** | May be malicious or compromised. |
-| Keel itself | Must be **trust-minimised** | No admin, no upgrade, no pause. See §3. |
+**What is structurally guaranteed** — enforced by the protocol, not by our discipline:
+
+- `beforeSwap` returns `BeforeSwapDeltaLibrary.ZERO_DELTA`; `afterSwap` returns `0`.
+- The deployed address has all four `*_RETURNS_DELTA_FLAG` bits clear, so v4 **never parses** a
+  returned delta (`Hooks.sol:266`, `:301`; `PoolManager.sol:181`, `:224`). Even a returned
+  non-zero delta would be discarded.
+- The constructor calls `Hooks.validateHookPermissions` with the full 14-flag set, so a
+  mis-mined address cannot be deployed at all.
+- The hook holds no token balances and has no transfer path. Asserted by test.
+
+**What is NOT guaranteed, and must not be claimed:**
+
+- The **fee override is an accounting-affecting lever.** `Pool.sol:303-307` uses it to decide how
+  much value moves from the swapper to the LPs on that swap. Windward steers it between `feeMin`
+  and `feeMax`. "Never touches accounting" is false for this contract and was removed.
+- A fee that is too high prices honest flow out of the pool. **That is the dominant harm**, and
+  it is the analogue of the old project's asymmetry rule: *a false ceiling that prices out honest
+  flow is worse than the LVR it prevents.*
 
 ## 3. Privileged roles
 
-**Keel has none, by design.**
+**None.** No owner, no admin, no governance, no upgrade path, no pause, no setters. All five
+parameters are `immutable` and set in the constructor. There is no `delegatecall`, no proxy, and
+no assembly outside the `sqrt` bit-scan.
 
-- No owner, no admin, no governance.
-- No upgradeability. No proxy, no `delegatecall` to mutable targets.
-- **No pause function.** A pause on a withdrawal path is a fund-freezing switch and reintroduces
-  exactly the centralisation risk Keel is supposed to remove.
-- No configurable parameters after deployment, unless Phase 4 proves a parameter is unavoidable.
-  If one is, it must be `immutable` and set in the constructor, and the choice must be recorded
-  in `DECISIONS.md` with the trade-off stated.
+A consequence worth stating plainly: **a badly-parameterised deployment is unrecoverable.** The
+constructor validates what it can (`feeMin <= feeMax < MAX_LP_FEE`, `0 < halfLife <= MAX_DT`,
+bounded `feePerSigma`, exact permission bits), but `feePerSigma` itself has no principled value.
 
-If a later phase argues for any privileged role, that is a **security change that materially
-increases risk** and requires the owner's explicit approval.
+## 4. Trust boundaries
 
-## 4. Prohibited shortcuts
+| Boundary | Trusted? | Notes |
+|---|---|---|
+| Uniswap v4 `PoolManager` | **Trusted** | Assumed correct. `StateLibrary` reads its storage directly. |
+| The pool's tick history | **Semi-trusted** | Written by the PoolManager and not forgeable by a caller — but a caller *can* steer it by trading. See §5. |
+| Swappers / LPs / searchers | **Untrusted** | Fully adversarial, can order and repeat their own calls. |
+| Pool tokens | **Not reached** | Windward never touches a token. FoT/rebasing/reentrant tokens are structurally out of scope. |
+| The deployer | **Untrusted after deployment** | Immutability means they retain no power. |
 
-Never do these. If one seems necessary, stop and record the trade-off in `DECISIONS.md` first.
+## 5. Known limitations of the signal
 
-- `--dangerously-skip-permissions`, `bypassPermissions`, or any equivalent.
-- Committing `.env`, a private key, a mnemonic, or a keystore file.
-- Pasting a private key into a file, a script, an environment variable, or the terminal.
-  Deployment uses a Foundry keystore account (`cast wallet import --interactive`).
-- `forge update`, or bumping any dependency without re-deriving the pin per D-0004 and re-running
-  the build canary.
-- Enabling `ffi` (D-0007).
-- Weakening or deleting a test to make a suite pass. Fix the code or record why the test was
-  wrong.
-- `unchecked` arithmetic without a comment stating why overflow is impossible.
-- String reverts. Use custom errors.
-- Writing an address, signature, version, or commit hash that was not verified this session.
-- Marking something `FACT` that was not verified, or promoting a tag without new evidence.
-- Deploying bytecode built under a profile other than the one the hook address was mined
-  against (D-0006).
+Stated here because they are security-relevant, not merely economic.
 
-## 5. Coding rules
+- **The tick is steerable.** Anyone can move the tick by trading, and therefore influence the
+  fee. Time-based decay bounds how long that influence lasts, and `MAX_OBSERVATION` bounds how
+  large one observation can be, but a well-funded actor can still raise a pool's fee by trading
+  it. The cost is their own price impact.
+- **The fee is set from state that excludes the current swap.** The trader who moves the price
+  pays the pre-move fee; the next trader pays the elevated one. This is a property of every
+  reactive dynamic fee, and it is a real limitation, not a subtlety.
+- **Same-block activity does not update the estimate** (`dt == 0`). This is deliberate — it is
+  what closes the dust-swap suppression attack — but it means intra-block volatility is measured
+  only at the next block.
 
-Enforced by `.claude/rules/solidity.md` and by the review chain.
+## 6. Prohibited
 
-- Checks-Effects-Interactions, always.
-- Custom errors, never string reverts.
-- **Every division states its rounding direction and who it favours.** Rounding is the failure
-  class this project exists to catch; unexamined rounding in the guard would be a bitter irony.
-- Explicit overflow reasoning in a comment for every `unchecked` block.
-- No unbounded loops on a swap or liquidity path. Griefing and gas-limit DoS.
-- No external calls from the guard beyond reads of the PoolManager and the guarded hook.
-- Reentrancy: assume every external read can reenter. Keel's checks must be correct even when
-  called re-entrantly, or must explicitly prevent it.
-- Solidity `0.8.26` pinned exactly; `evm_version = cancun` (D-0006).
+- Using the word *optimal*, or claiming a validated LP benefit, anywhere.
+- Presenting `test_sanity_higherFeeOnIdenticalVolumeCollectsMoreFees` as evidence. It proves
+  `10000 > 500`.
+- Quoting any statistic that did not come from `analysis/stats.py`. No hand-transcription.
+- Adding an owner, pause, upgrade path or setter.
+- Deploying bytecode built under a profile other than the one the address was mined against.
+- `unchecked` arithmetic without a stated bound; string reverts; unbounded loops on the swap path.
 
-## 6. Dependency policy
+## 7. Review status
 
-- Pins are commit-exact and evidenced in `docs/RECON.md` §4.
-- v4-core follows v4-periphery's own submodule pin; the rest follow v4-core's (D-0004).
-- **Adding a dependency is a scope change** and requires owner approval.
-- Any bump must: re-derive the pin from upstream's own submodule tree, re-run the build canary,
-  re-run the full suite, and be recorded in `DECISIONS.md`.
-- No package installed from npm into the contract build path.
+Three independent reviews were run on 2026-08-28 (`security-reviewer`, `protocol-reviewer`,
+`adversarial-reviewer`). Findings and their resolutions are in `DECISIONS.md` D-0018, and each
+repair is pinned by a regression test in `test/WindwardAttack.t.sol`.
 
-## 7. Secret handling
+Closed and proven: **F-1** (permission bits unenforced), **W-01** (dust-swap fee suppression),
+**W-02** (ceiling pinned indefinitely), **W-03** (200-pip fee ladder), **W-06**
+(`feeMax == MAX_LP_FEE` bricks exact-output swaps), **W-07**, **W-10**, **W-12**.
 
-- `.env` is gitignored and may never be read, printed, or committed. `.env.example` holds
-  placeholders only.
-- `.claude/settings.local.json` is gitignored — machine-specific RPC URLs and paths live there.
-- Deployment keys live in the Foundry keystore, encrypted, referenced by account name.
-  The account **name** is not a secret; the key never leaves the keystore.
-- `FACT` Claude Code's `Read`/`Edit` deny rules cover the built-in file tools and the file
-  commands it recognises in Bash (`cat`, `head`, `tail`, `sed`) — but **not** an arbitrary
-  subprocess such as a Python or Node script that opens the file itself. This is a real,
-  known limit of the `.env` protection. Recorded in `THREAT_MODEL.md`.
+Accepted, not fixed: the fee is set from pre-swap state (§5); the estimator conflates transient
+and permanent price impact (`DECISIONS.md` D-0019).
 
-## 8. Review requirements
+**Not audited.** This is a hackathon prototype. It must not secure real funds.
 
-For any security-sensitive change, run and record every stage:
+## 8. Deployment requirements
 
-```
-implement → test → security-reviewer → adversarial-reviewer → fix → test again
-```
-
-- Your own explanation of your code is **not** evidence that it is correct. Only passing tests
-  and independent review are.
-- Reviewers are read-only (D-0008). The main session applies fixes.
-- `protocol-reviewer` additionally reviews anything touching v4 callbacks, deltas, permission
-  bits, or deployment.
-- Every finding is either fixed or explicitly accepted in `THREAT_MODEL.md` with a reason.
-  Silently dropping a finding is prohibited.
-
-## 9. Deployment requirements
-
-Full list in the `release-check` skill. Non-negotiable minimum:
-
-1. Testnet before mainnet. **Mainnet requires the owner's explicit approval, every time.**
-2. Built with `FOUNDRY_PROFILE=deploy`, and the hook address mined against *that* bytecode
-   (D-0006).
-3. Hook address permission bits asserted on-chain after deployment, including the four
-   returns-delta bits being clear (§1).
-4. Source verified on the block explorer.
-5. Full suite green, including fuzz and invariant runs under the `deep` profile.
-6. `git submodule status` clean — no `+`/`-` prefixes (D-0010).
-7. `CURRENT_STATE.md` updated with the deployment, and the address recorded with its
-   transaction hash.
-
-## 10. Reporting
-
-This is a time-boxed research prototype and is **not audited**. It must not be used to secure
-real funds without an independent audit. The README must say so plainly.
+1. Testnet only. Mainnet requires explicit owner approval.
+2. Built with `FOUNDRY_PROFILE=deploy`, and the address mined against **that** bytecode.
+3. Permission bits asserted on-chain post-deploy.
+4. Full suite green, including the regression tests in `test/WindwardAttack.t.sol`.
+5. `git submodule status` clean.
+6. Verified source on the explorer.
+7. Gas overhead re-measured (`test/WindwardGas.t.sol`); currently 11,192 per swap, ~15%.
