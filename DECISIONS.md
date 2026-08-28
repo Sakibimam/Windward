@@ -556,3 +556,237 @@ It makes **no claim about current Unichain flow.** Its justification is theoreti
 structural property of every AMM, not a microstructure artefact) and its validation is a
 controlled simulation across regimes I generate. The microstructure study becomes the *framing*
 — why the hook cannot rely on contention signals — rather than a load-bearing premise.
+
+---
+
+## D-0017 — Three data-handling errors of mine. D-0016's mean-reversion FACT is WRONG.
+
+- **Date:** 2026-08-28 (Windward audit)
+- **Status:** corrections of record. **D-0016's "mean-reverts" claim is retracted.**
+
+### E-1 — Swap direction convention inverted (retracts a D-0016 `FACT`)
+
+`FACT` `lib/v4-core/src/PoolManager.sol:241-250` emits `Swap` with `delta.amount0()`, which is the
+**caller's** BalanceDelta — positive means the pool owes the caller, i.e. **the caller received
+token0** (a buy). The natspec at `lib/v4-core/src/interfaces/IPoolManager.sol:85` says "the delta
+of the currency0 balance of the pool", which is the opposite sign. **The natspec is misleading;
+the code is authoritative.**
+
+My analysis classified `amount0 > 0` as `zeroForOne` (a sell). That is inverted.
+
+**Consequence:** D-0016 records, tagged `FACT`, that the busiest pool's flow *"mean-reverts
+(+0.80bps after a sell)"*. With the correct convention that observation is **+0.80bps after a
+buy — i.e. momentum, not mean reversion.** Independently confirmed: AC(1) of signed swap-to-swap
+tick returns is **+0.612** (pool 1) and **+0.374** (pool 2). **That D-0016 `FACT` is retracted.**
+
+### E-2 — int24 tick sign-decoding (fixed in commit `cc58e3e`)
+
+`FACT` 231/745 tick values (31%) were decoded with a 24-bit sign convention; the ABI sign-extends
+`int24` across a full 32-byte word, so negative ticks decoded as ~2^256. Fixed. D-0016's
+"53-tick range" figure is **unaffected** — pool 1's ticks are positive (22275..22328) and decoded
+correctly. Recorded here because commit `cc58e3e` was the only prior record and a decision log is
+where this class of error belongs (cf. D-0009, D-0010).
+
+### E-3 — priority-fee denominator (already recorded in D-0016)
+
+Included for completeness: the first priority-fee reading used all transactions as the
+denominator rather than swap flow, inverting the conclusion. Corrected within D-0016.
+
+### What this means
+
+`INFERENCE` Three data errors in one session, all in analysis code that was **never committed**.
+Every `FACT` in D-0014/15/16 was produced by ad-hoc scratchpad scripts that no longer exist and
+cannot be re-run or checked by anyone. That is the root cause, and it is a process failure, not
+bad luck: **no analysis that produces a `FACT` may remain uncommitted.** Any study shipped from
+this repo must carry its collection and analysis code.
+
+`INFERENCE` The retraction of E-1 **removes the empirical leg of the adversarial reviewer's
+strongest argument** — that transient impact from benign flow dominates, so Windward taxes the
+good flow. On the corrected data, moves **persist**: Var(permanent@K)/Var(immediate) rises from
+3.2 (K=1) to 79 (K=20). The theoretical concern (an out-and-back noise round trip generates two
+squared observations for zero LVR, while an informed move generates one) still stands as a
+mechanism-level objection, but it is **not** supported by this dataset.
+
+`UNVERIFIED` Whether momentum or mean reversion is a property of Unichain v4 generally. The
+sample is 50 minutes in a single trending regime; AC(1)=+0.612 is inflated by a one-directional
+drift of 53 ticks. **This dataset cannot settle it.**
+
+---
+
+## D-0018 — Windward kill gate: **KILL the economic thesis.** Keep the code as an instrument.
+
+- **Date:** 2026-08-28 (post-audit kill gate)
+- **Status:** **DECIDED.** Three reviewers run; all findings below verified by the main session.
+- **Decision:** Kill the claim *"a volatility-scaled fee makes LPs better off."* Do not delete
+  `WindwardHook.sol` / `Volatility.sol`; demote them from product to **measurement instrument**.
+
+### Verified by live test (`test/WindwardAttack.t.sol`, 3 passing)
+
+| # | Finding | Evidence |
+|---|---|---|
+| W-01 **Critical** | The fee is **evadable in the same transaction by the trader it targets.** 30 dust swaps in one block drove the fee from **10000 → 500 pips, a 20× suppression**, for gas. Decay is applied per *observation*, not per unit time, so each no-move swap multiplies the estimate by (1−α). | `test_ATTACK_dustSwapsResetTheFeeToTheFloor` |
+| W-02 **High** | **No attacker required.** One ordinary large swap pins the pool at the 1% ceiling — and it is **still at the ceiling seven days later**, because nothing decays with time. | `test_ATTACK_oneHonestLargeSwapPinsPoolAtCeiling` |
+| W-03 **High** | Across **40 escalating swaps the hook charged exactly one distinct fee value.** Double integer truncation in `sigma()` destroys the signal. | `test_ATTACK_feeIsA200PipLadderNotACurve` |
+
+### Verified against the real dataset
+
+`FACT` Replaying the shipped algorithm over the real Unichain tick series: the fee sits at the
+floor **90.4% / 80.8% / 96.4%** of swaps for the three busiest pools, **never once** reaches the
+ceiling, and 52–85% of observations round to zero volatility. **On real flow Windward is
+bit-for-bit a static fee.**
+
+`FACT` The headline test `test_windwardEarnsMoreThanStaticFeeOnVolatileFlow` forces identical
+volume through both pools and asserts more fee growth. **It proves 10000 > 500.** It contains no
+demand elasticity, no LP PnL, and no counterfactual for flow that would have left. It is not
+evidence and must not be presented as such.
+
+### Verified by protocol review
+
+`FACT` **F-1 (High):** the constructor checks only that the four returns-delta bits are *clear*.
+It never verifies the three action flags are *set*. Deployed at an address missing
+`BEFORE_SWAP_FLAG`, a dynamic-fee pool falls back to `slot0.lpFee`, which v4 seeds to **0** —
+**every swap is fee-free forever, silently.** `Hooks.validateHookPermissions` exists for exactly
+this and was not called.
+
+### My own documentation was false
+
+`FACT` `Volatility.sol:22-29` claims `MIN_DT` "stops a same-second burst … an attacker could use
+to drive the fee to its ceiling." `MIN_DT = 1` clamps `dt` **up** to 1, which produces the
+**largest** possible observation. The comment asserts a security property the code inverts.
+`FACT` `MAX_OBSERVATION` is inert: the maximum reachable `sq` is only 3.15× the cap, so it never
+binds for any swap that has ever occurred.
+`FACT` The `sqrt` correctness argument is wrong (the initial guess is *below* the root, not
+above). The function is correct for a different reason.
+
+### Why this is a kill and not a fix
+
+`INFERENCE` W-01, W-02, W-03 and F-1 are each individually repairable — time-based decay, WAD
+precision, `validateHookPermissions`. Two of those repairs were prototyped and do produce a
+responsive fee curve on real data (125 distinct values, p10–p90 623–709). **But repairing the
+instrument does not establish the claim.** After every fix, the question *"why does this make LPs
+better off?"* would still be unanswered: there is no LP-PnL model, no demand-elasticity
+assumption, and no dataset capable of supporting one — 50 minutes, one regime, three of my own
+data-handling errors (D-0017). With ~25h to the deadline, that evidence cannot be produced, and
+the honest prior after seven dead candidates is that it would come back negative.
+
+`INFERENCE` The adversarial reviewer's strongest argument — that the estimator over-weights
+transient impact from the flow LPs profit from — **lost its empirical leg** when D-0017 retracted
+the mean-reversion finding; on corrected data moves persist. So the mechanism is **not refuted in
+theory**. It is refuted **in this implementation, on this data, in this time budget.**
+
+### What ships instead
+
+The **Unichain v4 microstructure study** as the primary artifact, with the hook retained as the
+instrument that produces its sharpest result: *"we built the volatility-adaptive fee hook the
+ecosystem keeps proposing, and on real Unichain flow it never leaves the fee floor."*
+
+Non-negotiable preconditions, in order:
+1. **Commit the collection and analysis code.** Every `FACT` in D-0014/15/16 came from scratchpad
+   scripts that no longer exist (D-0017 root cause). Nothing ships until it is reproducible.
+2. Widen the sample well beyond 50 minutes; re-run every statistic after the D-0017 fixes.
+3. Relabel or delete the tautological headline test.
+4. Rewrite `SECURITY.md` / `THREAT_MODEL.md`, which still describe a runtime guard that no longer
+   exists. The governing property is no longer "never touches accounting": the **fee override is
+   an accounting-affecting lever**, steerable between 500 and 10000 pips by W-01/W-02.
+
+---
+
+## D-0019 — Windward is a HEURISTIC. Retract the "optimal / LVR-minimising" claim.
+
+- **Date:** 2026-08-28 (Block 4, honest claims)
+- **Status:** **supersedes the mechanism description in D-0016.**
+
+D-0016 described Windward as *"implementing the optimal LVR-minimising fee from the 2025-26
+stochastic-control literature."* **That claim is withdrawn.** It was never true and must not
+appear in the repo, the README, or the deck.
+
+`FACT` What the literature models and what Windward measures are different objects:
+
+| The models (Milionis–Moallemi–Roughgarden; arXiv 2506.02869; arXiv 2606.21769) | Windward |
+|---|---|
+| σ of an **exogenous efficient price** | realised variance of the **pool** price |
+| continuous arbitrage, continuous rebalancing | discrete swaps at irregular intervals |
+| closed-form optimal fee under stated assumptions | a monotone map `fee = clamp(feeMin + k·σ)` |
+| an oracle or an exogenous price process is assumed | pool tick history only |
+
+`INFERENCE` Windward implements **none** of the models' preconditions. It is *motivated by* the
+observation that LVR grows with price variance; it does not implement any published optimal
+policy, and `feePerSigma` has no derivation — it is a free parameter.
+
+`FACT` The pool-price realised variance Windward measures also contains **transient price impact
+from uninformed flow**, which contributes no LVR. An out-and-back noise round trip produces two
+squared observations for zero efficient-price movement; a one-way informed move produces one.
+The estimator therefore does not cleanly isolate the quantity LVR depends on.
+
+**Standing rule for this repository:** the word *optimal* may not be used to describe Windward
+anywhere. Paper titles quoted as citations are exempt. The permitted description is:
+
+> A volatility-adaptive fee **heuristic** for Uniswap v4, computed from the pool's own tick
+> history. Motivated by the LVR literature; **not** an implementation of any optimal policy from
+> it, and **not** validated as improving LP outcomes.
+
+`INFERENCE` The economic claim remains **unvalidated**. Establishing it would need, at minimum:
+an LP-PnL comparison rather than a fee-revenue comparison, an explicit demand-elasticity
+assumption for the flow that leaves at a higher fee, and a decomposition showing the fee
+correlates with the *permanent* rather than the transient component of price impact. None of
+those exists, and the README must say so.
+
+---
+
+## D-0020 — 7-day re-measurement. **Three headline claims did not survive. Retracted.**
+
+- **Date:** 2026-08-28 (Block 2)
+- **Status:** supersedes the measurements in D-0016 and D-0017.
+- **Sample:** blocks 56549879–57154678, **7.00 days**, **426,807 swaps**, 127,870 liquidity
+  events, 232 pools, 6,000 sampled transactions. Previously: 50 minutes, 745 swaps, 40 arbs.
+  **573x more swap data.** Reproduce with `analysis/run.sh`; figures read from `data/stats.json`.
+
+### Corrections — every number that changed
+
+| Claim | 50-min sample | 7-day sample | Verdict |
+|---|---|---|---|
+| Retail pays **301x** the median arb in priority fees | 301x (n=40) | **1.4x** (C1, n=9) / **17.4x** (C2, n=619) | **RETRACTED.** The direction holds; the magnitude was an artefact of a 40-transaction window. Never quote 301x again. |
+| % of arbs paying below the retail median | 82% | 100% (C1) / **83.8%** (C2) | Survives |
+| JIT events | **0** | **19** | **RETRACTED.** "Zero JIT on Unichain" is false; it was absence of evidence in a 50-minute window. |
+| Distinct LP addresses | **3** | **46** | **RETRACTED.** |
+| % swaps alone in their block for their pool | 95.4% | **82.7%** | Overstated. Corrected figure still notable. |
+| Distinct pools with swaps | 41 | **232** | Corrected |
+| Price dynamics | "mean-reverting" (D-0016), then "momentum" (D-0017) | **Pool-dependent**: 2 of the 5 busiest mean-revert (AC(1) −0.139, −0.133; VR<1), 3 trend (AC(1) +0.114 to +0.186; VR>1) | **BOTH earlier claims RETRACTED.** Neither is a property of the chain. |
+
+`INFERENCE` The pattern is consistent: **every claim that over-generalised from the 50-minute
+window shrank or reversed.** The surviving qualitative statement is narrow — retail flow entering
+via the Universal Router pays a flat 1,450,000 wei default while most arbitrage-classified flow
+pays less — and even that is 1.4x–17.4x, not 301x, depending entirely on the classifier.
+
+### Arbitrage classifier — assumptions now stated explicitly
+
+Two classifiers are reported side by side because there is no ground truth:
+
+- **C1, same-pool round trip** (n=9): high precision, but misses multi-pool cyclic arbitrage
+  entirely, so it under-counts badly. n=9 is too small to carry a claim.
+- **C2, multi-swap non-Universal-Router** (n=619): **known false positives** — a multi-hop retail
+  trade routed via any non-UR aggregator (1inch, CoW, Odos, Matcha) is indistinguishable from a
+  cyclic arb under this rule, so it over-counts.
+- **Retail proxy** = `tx.to == Universal Router` (n=1,705). **Known false positives:**
+  sophisticated actors also route through the UR; the observed max UR priority fee is
+  464,058,459 wei, 320x the median, which is certainly not retail.
+
+`INFERENCE` The truth lies between C1 and C2. Any headline must quote **both bounds**, never one.
+
+### What this does to the hook's replay
+
+`FACT` The same 426,807 swaps run through both implementations:
+
+| | shipped v1 | repaired |
+|---|---|---|
+| observations rounding to zero | 44.9–79.6% | **2.7–41.2%** |
+| swaps charged at the fee floor | 20.6–79.5% | **0.0%** |
+| distinct fee values charged | 21–49 | **437–2,349** |
+| fee p10 / median / p90 (busiest pool) | — | 636 / 761 / 1331 pips |
+
+`INFERENCE` This is the one result that strengthened. The W-03 truncation defect is not a
+theoretical concern: on real flow the original implementation charged the floor on up to 79.5% of
+swaps, and the repair produces a genuinely continuous fee curve. **This is the demo.**
+
+`UNVERIFIED` That the repaired fee curve is *better for LPs*. It is a different curve, measured
+on real flow. Nothing here establishes a benefit — see D-0019.
