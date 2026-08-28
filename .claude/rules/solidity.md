@@ -1,3 +1,10 @@
+---
+paths:
+  - "src/**/*.sol"
+  - "test/**/*.sol"
+  - "script/**/*.sol"
+---
+
 # Rule — Solidity
 
 Applies to everything in `src/`, `test/`, and `script/`.

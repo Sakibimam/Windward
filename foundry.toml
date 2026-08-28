@@ -21,7 +21,13 @@ optimizer = true
 optimizer_runs = 800
 
 ffi = false                      # security: no arbitrary host command execution from tests
-fs_permissions = [{ access = 'read', path = './out' }]
+# The gas test WRITES its measured overhead to data/gas_overhead.json so that
+# analysis/gas_economics.py can read it instead of hardcoding the number. Hand-transcribing
+# a measured value is what caused D-0009/D-0017; this closes that path for the gas figure.
+fs_permissions = [
+    { access = 'read', path = './out' },
+    { access = 'read-write', path = './data' },
+]
 
 [profile.default.fuzz]
 runs = 1000

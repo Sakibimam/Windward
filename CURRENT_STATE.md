@@ -1,69 +1,81 @@
-# CURRENT_STATE.md — Windward (formerly Keel)
+# CURRENT_STATE.md — Windward
 
-**Read this file before anything else in a new session.**
+**Read this before anything else in a new session.**
 
-**Last updated:** 2026-08-28 — Windward implementation started, 28 tests green.
+**Last updated:** 2026-08-28 — Blocks 1-5 complete, 45 tests green.
 
 ---
 
-## Current project
+## What this is
 
-**Windward** — a volatility-adaptive dynamic-fee hook for Uniswap v4.
-Target: **UHI10 Hookathon** ("The Fair Flow Frontier: MEV protection and sustainable low-fee
-liquidity"). Submission deadline **2026-09-03**; demo day **2026-09-11**. ~30h build budget.
+**Windward** — a volatility-adaptive fee hook for Uniswap v4, plus a 7-day Unichain
+microstructure study. UHI10 Hookathon, submission **2026-09-03**, demo day 2026-09-11.
 
-**Keel is dead.** Both forms — the runtime guard (D-0013) and the invariant test kit (D-0014) —
-were killed on evidence. Read `DECISIONS.md` D-0013 through D-0016 before questioning this;
-seven candidate mechanisms were eliminated with recorded causes.
+Windward is the **ninth** candidate. Eight were killed; `DECISIONS.md` records each with
+evidence. **The project is LOCKED — no further pivots.** If something fails, repair or narrow
+scope.
 
-## Status
+## Block status
 
-| Area | State |
-|---|---|
-| `src/WindwardHook.sol` | Implemented. Prices swaps from EWMA tick variance. |
-| `src/lib/Volatility.sol` | Implemented. EWMA + integer sqrt, clamps, capped observations. |
-| `test/WindwardHook.t.sol` | 17 tests green (10 hook, 7 library). |
-| `data/unichain-swaps.json` | 745 real Unichain v4 swaps joined to tx priority fees. |
-| Calibration | **NOT DONE.** See blockers. |
-| Simulation harness on real traces | Not started. |
-| Demo script | Not started. |
-| Testnet deploy | Not started. |
-| README | Not written. |
+| Block | Scope | State |
+|---|---|---|
+| 1 | Reproducibility — `analysis/` as committed code, regression tests for both decode bugs | **DONE** |
+| 2 | Widen the sample to 7 days, re-test the priority-fee claim | **DONE** |
+| 3 | Repair the hook (F-1, W-01, W-02, W-03, W-06, W-07, W-10, W-12) | **DONE** |
+| 4 | Honest claims — SECURITY.md, THREAT_MODEL.md, no "optimal" anywhere | **DONE** |
+| 5 | Demo + writeup (`script/demo.sh`, `README.md`) | **DONE** |
+| 6 | Testnet deploy, verified source, rehearse | **BLOCKED — needs a funded key.** Sepolia addresses now verified on-chain; gas measured. |
 
-**Tests: 28 passing, 0 failing** (`forge test`). Build green.
+## Tests
 
-## Blockers / next actions, in order
+**47 passing, 0 failing** (`forge test`), plus `analysis/test_decode.py` (15 checks).
 
-1. **Calibrate `feePerSigma`.** In `test_windwardEarnsMoreThanStaticFeeOnVolatileFlow` the fee
-   saturates at `FEE_MAX` (10,000 pips) for most of the sequence, giving ~15.7x the static
-   pool's fee growth. That is a **parameter problem, not a correctness problem**, but a fee
-   pinned at its ceiling is a bad demo and an easy judge objection. Calibrate against the real
-   tick series in `data/unichain-swaps.json` so the fee moves through a sensible mid-range.
-2. Build the twin-pool simulation driven by the **real** trace rather than synthetic swaps.
-3. Write `script/demo.sh` — one command, prints the comparison table.
-4. README with the honest limitations section.
-5. Testnet deploy (Unichain Sepolia addresses in `docs/RECON.md` §7 are still `UNVERIFIED` —
-   verify on-chain first).
+- `test/WindwardAttack.t.sol` — one regression test per closed security finding
+- `test/SwapEventConvention.t.sol` — pins the Swap sign convention against the protocol
+- `test/WindwardHook.t.sol` — hook behaviour + fuzzed library properties
 
-## Known risks
+## The headline numbers (all from `data/stats.json`)
 
-- `HYPOTHESIS` That a volatility-scaled fee actually improves LP outcomes. Currently supported
-  by theory (LVR grows with variance) and by a synthetic twin-pool test. **Not yet demonstrated
-  on real flow.** Item 2 above is what turns this into evidence.
-- The mechanism is not novel; differentiation rests on execution quality plus the measured
-  Unichain study. Judges may still read it as "another dynamic fee hook."
-- `FACT` Fee saturation at current parameters (item 1).
+7 days, blocks 56549879-57154678, **426,807 swaps**, 232 pools, 6,000 sampled txs.
 
-## The measured Unichain study — the differentiator
+- Priority fee: retail median 1,450,000 wei vs arb median 1,000,000 (C1) / 83,161 (C2)
+  -> retail pays **1.4x to 17.4x more**. A priority-keyed fee would tax retail.
+- **82.7%** of swaps are alone in their block for their pool.
+- **19** JIT events in 7 days; **46** distinct LP addresses.
+- Direction is **pool-dependent** — 2 of 5 mean-revert, 3 trend.
+- Hook repair on the same 426,807 swaps: swaps at the fee floor **20.6-79.5% -> 0.0%**;
+  distinct fee values **21-49 -> 437-2,349**.
 
-All `FACT`, from primary on-chain data, recorded in `DECISIONS.md` D-0016:
-retail pays **301x** the median arbitrage transaction in priority fees; **82%** of arbs pay less
-than the median retail swap; **zero JIT** events; **3 unique LP addresses**; **95.4%** of swaps
-are alone in their block; **8.2 txs/block**. Unichain v4 has essentially no MEV microstructure,
-which is why Windward deliberately depends on none of those signals.
+## Retracted claims — do not requote
 
-## Stale documents
+`DECISIONS.md` D-0020. The 50-minute sample gave "301x priority gap", "zero JIT", "3 LP
+addresses". The 7-day sample gives **1.4-17.4x**, **19**, **46**. Also retracted: both the
+"mean-reverting" (D-0016) and the later "momentum" (D-0017) characterisations — the effect is
+pool-dependent, not a chain property.
 
-`PROJECT.md`, `SECURITY.md`, `THREAT_MODEL.md`, `TESTING.md`, `RESEARCH.md` still describe Keel.
-They are **historical** until rewritten for Windward. `DECISIONS.md`, `docs/RECON.md`,
-`docs/RECON-hooks.md` and `docs/BUNNI_CASE_STUDY.md` remain accurate and useful.
+## Standing rules
+
+1. The word **"optimal"** may not describe Windward anywhere (D-0019). It is a heuristic.
+2. The LP benefit is **unvalidated**. Fee revenue is not LP PnL.
+3. No statistic may be quoted that did not come from `analysis/stats.py`.
+4. `test_sanity_higherFeeOnIdenticalVolumeCollectsMoreFees` is **not evidence**; it proves
+   10000 > 500.
+
+## Next action — Block 6
+
+Deploy to Unichain Sepolia. **Blocked on a funded deployer key**, which only the owner can
+provide. Before deploying:
+
+1. Verify the Unichain Sepolia addresses in `docs/RECON.md` §7 on-chain — they are still
+   `UNVERIFIED`.
+2. Write `script/Deploy.s.sol` with CREATE2 address mining for the flag bits
+   `AFTER_INITIALIZE | BEFORE_SWAP | AFTER_SWAP`, all returns-delta bits clear.
+3. Mine and build under `FOUNDRY_PROFILE=deploy` (D-0006) — mining against default-profile
+   bytecode produces an address that does not match the deployed code.
+4. Gas is measured (11,192/swap); re-measure after any change to the hook.
+
+## Known gaps
+
+- Gas measured: **11,192 per swap, ~15%** of an unhooked swap (`test/WindwardGas.t.sol`).
+- No LP-PnL or demand-elasticity model (D-0019) — the central unvalidated claim.
+- `PROJECT.md`, `TESTING.md`, `RESEARCH.md` still describe earlier candidates and are historical.

@@ -1,3 +1,10 @@
+---
+paths:
+  - "test/**/*.sol"
+  - "src/**/*.sol"
+  - "foundry.toml"
+---
+
 # Rule — Testing
 
 `TESTING.md` holds the plan and the checklist. This is the standing discipline.

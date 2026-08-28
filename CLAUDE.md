@@ -1,4 +1,4 @@
-# CLAUDE.md — Keel
+# CLAUDE.md — Windward
 
 ## Session-start ritual
 
@@ -7,12 +7,17 @@ Do not start a new phase without the owner's approval.
 
 ## Identity
 
-**Keel** is a runtime safety layer for a *narrow class* of Uniswap v4 hooks: those implementing
-custom accounting with **share-like LP claims** (vault-style wrappers that tokenise LP positions
-into fungible claims). It enforces, during execution, that share-like claims remain properly
-backed by assets — preventing economically invalid state transitions that the PoolManager's
-settlement invariant does not catch. This is a **hypothesis**, not a conclusion; Phase 4 exists
-to test whether such an invariant actually exists.
+**Windward** is a volatility-adaptive fee hook for Uniswap v4. It sets the LP fee per swap from a
+time-decayed estimate of the pool's own realised tick variance — no oracle, no external call, no
+priority-fee assumption, no admin key. It ships with a 7-day, 426,807-swap Unichain
+microstructure study that produced the design.
+
+It is a **heuristic** motivated by the loss-versus-rebalancing literature, **not** an
+implementation of any optimal policy from it, and the claim that it improves LP outcomes is
+**unvalidated**. The word *optimal* may not be used to describe it (`DECISIONS.md` D-0019).
+
+Windward is the ninth candidate here; eight were killed on evidence. **Keel** — the runtime
+accounting guard this file used to describe — is dead (D-0013, D-0018). Do not resurrect it.
 
 ## The seven rules
 
@@ -27,11 +32,13 @@ to test whether such an invariant actually exists.
 4. **Tag every substantive claim**: `FACT` (verified this session, with source) / `INFERENCE`
    (reasoned from verified evidence) / `HYPOTHESIS` (being tested) / `UNVERIFIED`.
    Never silently promote a tag.
-5. **You are authorised and expected to kill this project** if a kill condition in `PROJECT.md`
-   becomes true. Do not preserve the thesis out of momentum.
+5. **The project is LOCKED. Do not propose a tenth candidate.** Nine were tried and eight were
+   killed on evidence (`DECISIONS.md` D-0013 to D-0018) — that phase is over. If something
+   fails, **repair it or narrow the scope**; do not switch projects. Report a fatal finding
+   honestly and let the owner decide.
 6. **Never weaken security to save time without recording the trade-off in `DECISIONS.md`.**
-7. **Every phase ends with a green build and an updated `CURRENT_STATE.md`.** Never leave broken
-   code and continue.
+7. **Every block of work ends with a green build and an updated `CURRENT_STATE.md`.** Never
+   leave broken code and continue.
 
 ## Source-of-truth hierarchy
 
@@ -44,44 +51,25 @@ Evidence lives in `docs/RECON.md`. If any document disagrees with it, `docs/RECO
 | Purpose | Command |
 |---|---|
 | Build | `forge build` |
-| Test | `forge test` |
+| Test (47 tests) | `forge test` |
 | One test, verbose | `forge test --match-test <name> -vvv` |
+| Attack regressions | `forge test --match-path "test/WindwardAttack.t.sol"` |
+| Gas overhead | `forge test --match-path "test/WindwardGas.t.sol" -vv` |
 | Deep fuzz / invariant | `FOUNDRY_PROFILE=deep forge test` |
-| Coverage | `forge coverage` |
-| Gas | `forge snapshot` |
 | Format | `forge fmt` |
-| Fork test | `forge test --fork-url $UNICHAIN_RPC_URL` |
 | Production build | `FOUNDRY_PROFILE=deploy forge build` |
+| **Reproduce the study** | `analysis/run.sh` (`--quick` for a 20k-block window) |
+| Decoder regressions | `python3 analysis/test_decode.py` |
+| Gas in dollars | `python3 analysis/gas_economics.py` |
+| **Demo** | `script/demo.sh` (5.7s cold, offline) |
 | Hook self-test | `.claude/hooks/guard-bash.test.sh "$PWD/.claude/hooks/guard-bash.sh"` |
 
-## Directory map
+## Dependencies and verified facts
 
-| Path | What it is |
-|---|---|
-| `src/` | Contracts. Currently only `CompileCanary.sol` — a throwaway pin-verification canary. |
-| `test/` | Foundry tests. |
-| `script/` | Deployment scripts. Empty. |
-| `lib/` | Pinned dependencies as git submodules. **Never `forge update`.** |
-| `docs/RECON.md` | All Phase 0/1 evidence: tool output, pins, verified signatures, addresses. |
-| `docs/RECON-guard-hook.md` | PreToolUse hook evidence and test results. |
-| `docs/INVARIANTS.md` | **Phase 4 deliverable.** Does not exist yet. |
-| `.claude/rules/` | Always-loaded coding, security, testing, and research rules. |
-| `.claude/agents/` | Four read-only review subagents. |
-| `.claude/skills/` | `verify-before-code`, `keel-security-review`, `release-check`. |
-
-## Verified dependency pins
-
-Evidence: `docs/RECON.md` §4. Resolved by following v4-periphery's own submodule tree, **not**
-by taking latest tags (`DECISIONS.md` D-0004).
-
-| Dependency | Commit |
-|---|---|
-| v4-periphery | `dce236d4e2057422d0791d9a973a58765eb46f65` |
-| v4-core | `59d3ecf53afa9264a16bba0e38f4c5d2231f80bc` |
-| permit2 | `cc56ad0f3439c502c246fc5cfcc3db92bb8b7219` |
-| forge-std | `1de6eecf821de7fe2c908cc48d3ab3dced20717f` |
-| solmate | `4b47a19038b798b4a33d9749d25e570443520647` |
-| openzeppelin-contracts | `dbb6104ce834628e473d2173bbc9d47f81a9eec3` |
+Pins are commit-exact and live in `docs/RECON.md` §4 — read them there rather than duplicating
+them here (`git submodule status` prints the live values). They were resolved by following
+v4-periphery's own submodule tree, **not** by taking latest tags (`DECISIONS.md` D-0004).
+**Never `forge update`.**
 
 Toolchain: Foundry 1.7.1, solc `0.8.26`, evm `cancun` (required — v4 uses transient storage).
 
@@ -94,14 +82,19 @@ on-chain. **Never invent an address**; only `docs/RECON.md` §7 addresses may be
 
 ## Governing security property
 
-> **The guard observes and reverts. It never touches accounting.**
+> **Windward cannot move funds. It can only price them.**
 
-Hook callbacks return zero deltas; the hook address must have the four `*_RETURNS_DELTA_FLAG`
-bits (address bits 0–3) **clear**, asserted by test. Keel has no owner, no upgrade path, and
-**no pause** — a pause on a withdrawal path is a fund-freezing switch.
+`beforeSwap` returns a zero delta and `afterSwap` returns `0`; the address has all four
+`*_RETURNS_DELTA_FLAG` bits (address bits 0–3) **clear**, so v4 never even parses a returned
+delta. The constructor calls `Hooks.validateHookPermissions` with the full 14-flag set. No owner,
+no pause, no upgrade path, no setters — every parameter is `immutable`.
 
-**A false positive that freezes withdrawals is worse than the bug it prevents.** It is an
-explicit kill condition.
+**What is NOT guaranteed:** the fee override *is* an accounting-affecting lever
+(`Pool.sol:303-307`), and Windward steers it between `feeMin` and `feeMax`. "Never touches
+accounting" was Keel's property and is **false here**.
+
+**The dominant harm is a fee high enough to price honest flow out of the pool.** Full analysis in
+`THREAT_MODEL.md`; policy in `SECURITY.md`.
 
 ## Review chain — mandatory for security-sensitive changes
 
@@ -153,7 +146,30 @@ Do not generate a large amount of code from unverified assumptions.
 `docs/RECON.md`, and **explicitly flag any conflict between your context and the files.** The
 files win. Say so out loud rather than silently reconciling.
 
-## Current phase
+## The surviving finding
 
-**Phase 0 complete. Awaiting owner approval to begin Phase 1 (Uniswap v4 research).**
-See `CURRENT_STATE.md` for the exact next action.
+The naive volatility fee sits at its **fee floor on 20.6–79.5%** of real Unichain swaps and takes
+only **21–49 distinct values** across 426,807 of them. The repaired version sits at the floor
+**0.0%** of the time and takes **437–2,349** values on the same data. Integer division in
+`(dTick²)/dt` and `sqrt(var/WAD)` truncated most real observations to zero; carrying WAD scaling
+through the division fixes it. Every figure here comes from `data/stats.json`.
+
+## Standing rules
+
+1. **The word "optimal" may not describe Windward anywhere** — repo, README, or deck
+   (`DECISIONS.md` D-0019). It is a **heuristic** motivated by the LVR literature, not an
+   implementation of any optimal policy from it. Paper titles quoted as citations are exempt.
+2. **The LP benefit is unvalidated.** Fee revenue is not LP PnL, and there is no
+   demand-elasticity model. Never imply otherwise.
+3. **No statistic may be quoted that did not come from `analysis/stats.py`** or
+   `analysis/gas_economics.py`. No hand-transcription — that caused all three data errors (D-0017).
+4. `test_sanity_higherFeeOnIdenticalVolumeCollectsMoreFees` is **not evidence**; it proves
+   `10000 > 500`.
+5. Retracted claims must never be requoted: the 301× priority gap, zero JIT, 3 LP addresses, and
+   both the "mean-reverting" and "momentum" characterisations (D-0020).
+
+## Current status
+
+**Blocks 1–5 complete. 47 tests passing.** Remaining: testnet deployment, then freeze.
+The project is **LOCKED — no further pivots.** If something fails, repair or narrow scope.
+`CURRENT_STATE.md` has the exact next action.
