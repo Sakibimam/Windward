@@ -23,23 +23,36 @@ import {Volatility} from "./lib/Volatility.sol";
 /// LPs are being picked off. Windward scales the fee with realised volatility so that the fee
 /// tracks the adverse-selection cost it is meant to compensate.
 ///
-/// **Why not the obvious signals.** Measurements of live Unichain v4 flow (`data/`, and the
-/// study in `docs/`) ruled out every contention-based signal:
-///   - priority fee: retail pays ~301x the median arbitrage transaction, so a priority-keyed
-///     fee would tax retail and subsidise arbitrage;
-///   - first-of-block position: 95.4% of swaps are already first-of-block for their pool;
-///   - JIT races and intra-block ordering: not observed at all in the sampled window.
+/// **Why not the obvious signals.** A 7-day, 426,807-swap study of live Unichain v4 flow ruled
+/// out every contention-based signal. Figures are the CORRECTED ones from `data/stats.json`;
+/// an earlier 50-minute sample produced larger numbers that are retracted in `DECISIONS.md`
+/// D-0020 and must not be requoted:
+///   - priority fee: retail (Universal Router) pays MORE than arbitrage-classified flow —
+///     a 17.4x median ratio under the broad classifier (n=619). A priority-keyed fee would
+///     tax retail. The conservative classifier has n=9 and cannot support a magnitude.
+///   - first-of-block position: 82.7% of swaps are already the FIRST swap for their pool in
+///     their block, leaving too thin a base to key a mechanism on.
+///   - JIT: 19 events in 7 days across 232 pools. The design was also already covered by
+///     OpenZeppelin's `LiquidityPenaltyHook`.
 /// Windward therefore depends on none of them. Tick history is written by the PoolManager, is
 /// available on every chain, and needs no oracle and no external call.
 ///
-/// **Security posture.** This hook observes and prices. It never touches accounting:
-///   - `beforeSwap` returns `BeforeSwapDeltaLibrary.ZERO_DELTA`;
-///   - `afterSwap` returns `0`;
-///   - the deployed address MUST have all four `*_RETURNS_DELTA_FLAG` bits (address bits 0-3)
-///     clear, which makes the property protocol-enforced rather than a matter of our discipline:
-///     with those bits clear v4 never even parses a returned delta
-///     (`Hooks.sol:301`, `PoolManager.sol:224`). Asserted by test.
-/// There is no owner, no upgrade path, and no pause. Every parameter is immutable.
+/// **Security posture: this hook cannot move funds. It can only price them.**
+///   - `beforeSwap` returns `BeforeSwapDeltaLibrary.ZERO_DELTA`; `afterSwap` returns `0`;
+///   - the deployed address has all four `*_RETURNS_DELTA_FLAG` bits (address bits 0-3) clear,
+///     so v4 never even parses a returned delta (`Hooks.sol:266`, `:301`;
+///     `PoolManager.sol:181`, `:224`). Protocol-enforced, not a matter of our discipline;
+///   - the constructor calls `Hooks.validateHookPermissions` with the full 14-flag set;
+///   - no owner, no pause, no upgrade path, no setters. Every parameter is `immutable`.
+///
+/// What is NOT claimed: the fee override IS an accounting-affecting lever (`Pool.sol:303-307`)
+/// and this hook steers it between `feeMin` and `feeMax`. "Never touches accounting" was the
+/// property of an earlier, abandoned design and is FALSE here. The dominant harm is a fee high
+/// enough to price honest flow out of the pool. See `SECURITY.md` and `THREAT_MODEL.md`.
+///
+/// The claim that this improves LP outcomes is UNVALIDATED (`DECISIONS.md` D-0019). This is a
+/// heuristic motivated by the loss-versus-rebalancing literature, not an implementation of any
+/// optimal policy from it.
 contract WindwardHook is IHooks {
     using LPFeeLibrary for uint24;
     using StateLibrary for IPoolManager;
@@ -76,8 +89,13 @@ contract WindwardHook is IHooks {
     uint256 public immutable feePerSigma;
 
     /// @notice Seconds over which an old variance estimate loses half its weight.
-    /// Decay is by elapsed TIME, so a quiet pool releases its fee ceiling on its own and
-    /// same-block dust swaps cannot wash the estimate out.
+    ///
+    /// Decay is by elapsed TIME rather than by observation count, which is what stops same-block
+    /// dust swaps from washing the estimate out.
+    ///
+    /// KNOWN LIMITATION (H-1, `THREAT_MODEL.md` §6): decay is applied in `afterSwap`, not on
+    /// read, so a quiet pool does NOT release its ceiling on its own — it releases only once a
+    /// trade occurs, and that trade pays the un-decayed fee.
     uint256 public immutable halfLife;
 
     mapping(PoolId => PoolState) private _state;
@@ -131,14 +149,41 @@ contract WindwardHook is IHooks {
     }
 
     /// @notice The current fee this hook would charge the given pool, in pips.
-    /// @dev View helper for the demo and for integrators. Pure function of stored state.
+    /// @dev Decays the stored estimate forward to `block.timestamp` before pricing, so a quiet
+    /// pool quotes a falling fee rather than the fee it last traded at. See `_varianceNow`.
     function currentFee(PoolId poolId) public view returns (uint24) {
-        return _feeFor(_state[poolId].varianceWad);
+        return _feeFor(_varianceNow(_state[poolId]));
     }
 
     /// @notice Current volatility estimate, WAD-scaled, in ticks per sqrt(second).
+    /// @dev Also decayed to `block.timestamp`, so it agrees with `currentFee`.
     function currentSigmaWad(PoolId poolId) external view returns (uint256) {
-        return Volatility.sigmaWad(_state[poolId].varianceWad);
+        return Volatility.sigmaWad(_varianceNow(_state[poolId]));
+    }
+
+    /// @dev The stored variance decayed forward for the time elapsed since it was last written.
+    ///
+    /// **Why this exists (finding H-1).** `afterSwap` applies decay only when a swap happens, so
+    /// reading `varianceWad` raw prices the pool as though no time had passed since the last
+    /// trade. A pool driven to the 1% ceiling and then left alone still quoted 1% seven days
+    /// later, and the trader who broke the silence paid it in full — a 20x overcharge that was
+    /// also self-reinforcing, because a fee that deters flow prevents the very trade that would
+    /// have decayed it.
+    ///
+    /// Decaying on READ makes elapsed time lower the fee without requiring anyone to transact.
+    /// It is a pure function of state and the block timestamp: it writes nothing, so the
+    /// estimator's update path and its dt == 0 anchor semantics are unchanged.
+    ///
+    /// An uninitialised pool has `lastTimestamp == 0`, so `dt` saturates at MAX_DT and the
+    /// decay factor is zero — the view reports the floor, which is the correct answer for a
+    /// pool this hook knows nothing about.
+    function _varianceNow(PoolState storage st) internal view returns (uint256) {
+        // block.timestamp is monotonic and lastTimestamp derives from it, so no underflow.
+        uint256 dt = block.timestamp - st.lastTimestamp;
+        if (dt == 0) return st.varianceWad;
+        if (dt > Volatility.MAX_DT) dt = Volatility.MAX_DT;
+        // Rounds DOWN, favouring the swapper: a truncated decay can only make the fee lower.
+        return (Volatility.decayFactor(dt, halfLife) * st.varianceWad) / Volatility.WAD;
     }
 
     function getPoolState(PoolId poolId) external view returns (PoolState memory) {
@@ -188,9 +233,10 @@ contract WindwardHook is IHooks {
         return IHooks.afterInitialize.selector;
     }
 
-    /// @dev Prices the swap from the volatility estimate accumulated so far. The estimate is NOT
-    /// updated here: updating before the swap would let a swapper pay a fee computed from their
-    /// own price impact, which is the wrong direction. The update happens in `afterSwap`.
+    /// @dev Prices the swap from the volatility estimate accumulated so far, decayed forward for
+    /// the time elapsed since the last update. The estimate is NOT written here: updating before
+    /// the swap would let a swapper pay a fee computed from their own price impact, which is the
+    /// wrong direction. The write happens in `afterSwap`.
     function beforeSwap(address, PoolKey calldata key, SwapParams calldata, bytes calldata)
         external
         view
@@ -198,7 +244,8 @@ contract WindwardHook is IHooks {
         onlyPoolManager
         returns (bytes4, BeforeSwapDelta, uint24)
     {
-        uint24 fee = _feeFor(_state[key.toId()].varianceWad);
+        // Decayed to NOW, not to the last trade: see `_varianceNow` (finding H-1).
+        uint24 fee = _feeFor(_varianceNow(_state[key.toId()]));
         // OVERRIDE_FEE_FLAG tells v4 to use this fee for this swap only
         // (`Pool.sol:303-304`). ZERO_DELTA: this hook never alters accounting.
         return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee | LPFeeLibrary.OVERRIDE_FEE_FLAG);

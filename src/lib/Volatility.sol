@@ -86,10 +86,15 @@ library Volatility {
     }
 
     /// @notice `2^(-dt/halfLife)`, WAD-scaled, in [0, WAD].
-    /// @dev Exact halvings for the integer part, linear interpolation across the
-    /// remainder. The interpolation understates the true exponential by at most ~6% of
-    /// the factor — immaterial for a heuristic — and is monotone non-increasing in `dt`,
-    /// which is the property that matters: a longer gap can never retain more weight.
+    /// @dev Exact halvings for the integer part, linear interpolation across the remainder.
+    ///
+    /// A linear chord lies ABOVE the convex curve `2^-x`, so the interpolation OVERSTATES the
+    /// retained weight by at most ~6.07% (at `dt/halfLife = 0.5` it returns 0.75 against a true
+    /// 0.70711). Effective memory is therefore slightly LONGER than the nominal half-life, not
+    /// shorter. An earlier comment here claimed the opposite direction; it was wrong.
+    ///
+    /// Immaterial for a heuristic, and monotone non-increasing in `dt`, which is the property
+    /// that matters: a longer gap can never retain more weight.
     function decayFactor(uint256 dt, uint256 halfLife) internal pure returns (uint256) {
         if (halfLife == 0) return 0;
         uint256 n = dt / halfLife;

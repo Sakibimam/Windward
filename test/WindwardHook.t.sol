@@ -184,6 +184,24 @@ contract WindwardHookTest is Test, Deployers {
 
     /// @notice The other half of the claim, and the one that is easy to get wrong: on calm flow
     /// Windward must NOT overcharge relative to the same static fee.
+    /// @notice Calm flow must not be meaningfully more expensive than the matched static pool.
+    ///
+    /// @dev This assertion used to be `assertEq(fee, FEE_MIN)`, and that exact equality was an
+    /// ARTEFACT OF FINDING H-1, not a property of the design. Before decay-on-read, the second
+    /// iteration was charged a stale 503 pips computed from an hour-old observation; those extra
+    /// 3 pips were just enough that the 1e12 dust swap could no longer cross back over the tick
+    /// boundary. The price stuck at -1, no further movement was ever observed, and the estimate
+    /// decayed to zero — so the pool read as perfectly calm because the stale fee had suppressed
+    /// the very flow that would have revealed it moving. H-1's self-reinforcing pathology,
+    /// reproduced inside a test that was reading as a pass.
+    ///
+    /// With decay-on-read the second swap is charged the floor, crosses back, and the pool
+    /// oscillates 0 / -1 once an hour. That is genuine movement, so sigma is genuinely non-zero
+    /// and the fee genuinely sits a few pips above the floor. The mechanism is working.
+    ///
+    /// So the test now asserts what it always meant: on calm flow Windward stays within a few
+    /// pips of its floor. It does not assert an exact equality that only held while a bug was
+    /// silencing the pool. (`DECISIONS.md` D-0022.)
     function test_windwardDoesNotOverchargeOnCalmFlow() public {
         for (uint256 i = 0; i < 8; i++) {
             vm.warp(block.timestamp + 3600);
@@ -191,7 +209,11 @@ contract WindwardHookTest is Test, Deployers {
             swap(staticKey, i % 2 == 0, -1e12, "");
         }
 
-        assertEq(hook.currentFee(dynKey.toId()), FEE_MIN, "a calm pool must sit at the floor, not above the static fee");
+        uint24 fee = hook.currentFee(dynKey.toId());
+        assertGe(fee, FEE_MIN, "never below the floor");
+        // 10 pips = 2% of the 500-pip floor = 0.001% of notional. A one-tick-per-hour pool is
+        // calm by any economic definition, and must be priced as such.
+        assertLe(fee, FEE_MIN + 10, "calm flow must stay within a few pips of the floor");
     }
 }
 

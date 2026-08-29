@@ -93,6 +93,10 @@ contract WindwardAttackTest is Test, Deployers {
     // W-02 — the ceiling releases with elapsed time
     // ===================================================================================
 
+    /// @dev NOTE: this warps AND THEN SWAPS before reading, so it tests decay-with-elapsed-time,
+    /// NOT decay-on-read. The fee is still read from undecayed state — see H-1 in
+    /// `test/WindwardOpenFindings.t.sol`. The assertion below was previously worded as though it
+    /// proved the ceiling releases without trading; it does not.
     function test_W02_feeDecaysWithWallClockTimeNotSwapCount() public {
         vm.warp(block.timestamp + 1);
         swap(key_, true, -1e18, "");
@@ -105,7 +109,7 @@ contract WindwardAttackTest is Test, Deployers {
         uint24 cooled = hook.currentFee(key_.toId());
         emit log_named_uint("fee immediately after the move", hot);
         emit log_named_uint("fee one hour later", cooled);
-        assertLt(cooled, hot, "W-02 CLOSED: the ceiling releases as time passes");
+        assertLt(cooled, hot, "W-02: the estimate decays with elapsed time ONCE A TRADE OCCURS");
     }
 
     function test_W02_oneLargeSwapDoesNotPinTheCeiling() public {

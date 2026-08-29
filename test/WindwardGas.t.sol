@@ -86,8 +86,10 @@ contract WindwardGasTest is Test, Deployers {
         // TIGHT bound, not a guard rail. The README quotes this number, so it must be
         // pinned here rather than transcribed from a log. Widen deliberately (and update
         // the README) if a change to the hook genuinely moves it.
-        assertGe(overhead, 10_500, "gas overhead below the pinned range - update the README");
-        assertLe(overhead, 12_000, "gas overhead above the pinned range - update the README");
+        // Range re-pinned when H-1's decay-on-read was added: reading the fee now costs one
+        // decayFactor() evaluation in beforeSwap, ~1,030 gas over the previous 11,192.
+        assertGe(overhead, 11_500, "gas overhead below the pinned range - update the README");
+        assertLe(overhead, 13_000, "gas overhead above the pinned range - update the README");
 
         // Persist it so analysis/gas_economics.py reads a measurement rather than a constant.
         string memory json = string.concat(
