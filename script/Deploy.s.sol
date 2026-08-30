@@ -27,7 +27,7 @@ import {HookMiner} from "./HookMiner.sol";
 contract Deploy is Script {
     /// @dev Verified on-chain 2026-08-28: chain id 1301, PoolManager has code, and both
     /// StateView and PositionManager independently return this address from `poolManager()`.
-    /// `docs/RECON.md` §7. Never substitute an unverified address here.
+    /// `docs/RECON.md` §6. Never substitute an unverified address here.
     IPoolManager constant POOL_MANAGER = IPoolManager(0x00B036B58a818B1BC34d502D3fE730Db729e62AC);
 
     // Parameters. These match the values used throughout the study and the test suite, so the
