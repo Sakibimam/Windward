@@ -214,11 +214,11 @@
         "observationsConsidered": 65791,
         "pctAtFeeFloor": 0.0,
         "pctAtFeeCeiling": 0.0,
-        "distinctFeeValues": 2349,
-        "feeP10": 636,
-        "feeMedian": 761,
-        "feeP90": 1331,
-        "feeMax": 3165
+        "distinctFeeValues": 2412,
+        "feeP10": 635,
+        "feeMedian": 760,
+        "feeP90": 1329,
+        "feeMax": 3163
       }
     },
     {
@@ -262,10 +262,10 @@
         "observationsConsidered": 72307,
         "pctAtFeeFloor": 0.0,
         "pctAtFeeCeiling": 0.3,
-        "distinctFeeValues": 1786,
-        "feeP10": 577,
-        "feeMedian": 643,
-        "feeP90": 965,
+        "distinctFeeValues": 1843,
+        "feeP10": 576,
+        "feeMedian": 642,
+        "feeP90": 962,
         "feeMax": 10000
       }
     },
@@ -310,10 +310,10 @@
         "observationsConsidered": 51447,
         "pctAtFeeFloor": 0.0,
         "pctAtFeeCeiling": 0.0,
-        "distinctFeeValues": 1039,
+        "distinctFeeValues": 1056,
         "feeP10": 557,
-        "feeMedian": 639,
-        "feeP90": 837,
+        "feeMedian": 638,
+        "feeP90": 836,
         "feeMax": 2817
       }
     },
@@ -358,10 +358,10 @@
         "observationsConsidered": 25352,
         "pctAtFeeFloor": 0.0,
         "pctAtFeeCeiling": 0.0,
-        "distinctFeeValues": 909,
-        "feeP10": 568,
-        "feeMedian": 645,
-        "feeP90": 856,
+        "distinctFeeValues": 938,
+        "feeP10": 565,
+        "feeMedian": 643,
+        "feeP90": 855,
         "feeMax": 2771
       }
     },
@@ -406,12 +406,17 @@
         "observationsConsidered": 19467,
         "pctAtFeeFloor": 0.0,
         "pctAtFeeCeiling": 0.0,
-        "distinctFeeValues": 437,
-        "feeP10": 521,
-        "feeMedian": 554,
-        "feeP90": 685,
-        "feeMax": 1215
+        "distinctFeeValues": 440,
+        "feeP10": 520,
+        "feeMedian": 553,
+        "feeP90": 684,
+        "feeMax": 1212
       }
     }
-  ]
+  ],
+  "windwardReplaySwapWeighted": {
+    "swaps": 290640,
+    "shipped_v1_pctAtFeeFloor": 49.9,
+    "repaired_pctAtFeeFloor": 0.0
+  }
 }

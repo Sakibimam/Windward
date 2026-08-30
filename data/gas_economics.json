@@ -1,10 +1,10 @@
 {
   "gasPriceWei": 1500000,
-  "gasOverhead": 11192,
-  "overheadPctOfUnhooked": 15,
+  "gasOverhead": 12221,
+  "overheadPctOfUnhooked": 17,
   "unhookedSwapGas": 71259,
-  "ethUsd": 2441.6,
-  "gasCostUsd": 4.0989576222618106e-05,
+  "ethUsd": 2509.35,
+  "gasCostUsd": 4.6000062260422803e-05,
   "staticFeePips": 500,
   "pools": [
     {
@@ -12,28 +12,28 @@
       "pair": "USDC/HYPE",
       "medianSwapUsd": 113.62284,
       "n": 89048,
-      "feeP10Pips": 636,
-      "deltaP10Pips": 136,
-      "breakevenP10Usd": 0.30139394281336845,
-      "shareAboveBreakevenP10": 0.9976641811158027,
-      "feeMedianPips": 761,
-      "deltaMedianPips": 261,
-      "breakevenMedianUsd": 0.15704818476098892,
-      "shareAboveBreakevenMedian": 0.9989443895427186
+      "feeP10Pips": 635,
+      "deltaP10Pips": 135,
+      "breakevenP10Usd": 0.3407412019290578,
+      "shareAboveBreakevenP10": 0.9975855718264307,
+      "feeMedianPips": 760,
+      "deltaMedianPips": 260,
+      "breakevenMedianUsd": 0.17692331638624156,
+      "shareAboveBreakevenMedian": 0.9988994699487916
     },
     {
       "pool": "0x75b19237e8069600566be945953c5fd815cdfb26bd3972821d0ae8d6b7d5e51d",
       "pair": "USDC/SOL",
       "medianSwapUsd": 0.915571,
       "n": 76313,
-      "feeP10Pips": 577,
-      "deltaP10Pips": 77,
-      "breakevenP10Usd": 0.5323321587353,
-      "shareAboveBreakevenP10": 0.9898575603108252,
-      "feeMedianPips": 643,
-      "deltaMedianPips": 143,
-      "breakevenMedianUsd": 0.28664039316516154,
-      "shareAboveBreakevenMedian": 0.9941294405933458
+      "feeP10Pips": 576,
+      "deltaP10Pips": 76,
+      "breakevenP10Usd": 0.6052639771108264,
+      "shareAboveBreakevenP10": 0.9891106364577464,
+      "feeMedianPips": 642,
+      "deltaMedianPips": 142,
+      "breakevenMedianUsd": 0.3239441004255127,
+      "shareAboveBreakevenMedian": 0.9932645813950441
     },
     {
       "pool": "0x3258f413c7a88cda2fa8709a589d221a80f6574f63df5a5b6774485d8acc39d9",
@@ -42,26 +42,26 @@
       "n": 71915,
       "feeP10Pips": 557,
       "deltaP10Pips": 57,
-      "breakevenP10Usd": 0.7191153723266334,
-      "shareAboveBreakevenP10": 0.9827991378710978,
-      "feeMedianPips": 639,
-      "deltaMedianPips": 139,
-      "breakevenMedianUsd": 0.29488903757279217,
-      "shareAboveBreakevenMedian": 0.9911701314051311
+      "breakevenP10Usd": 0.8070186361477685,
+      "shareAboveBreakevenP10": 0.9810887853716193,
+      "feeMedianPips": 638,
+      "deltaMedianPips": 138,
+      "breakevenMedianUsd": 0.3333337844958174,
+      "shareAboveBreakevenMedian": 0.9904331502468192
     },
     {
       "pool": "0x04b7dd024db64cfbe325191c818266e4776918cd9eaf021c26949a859e654b16",
       "pair": "WETH/USD\u20ae0",
       "medianSwapUsd": 103.041852,
       "n": 31011,
-      "feeP10Pips": 568,
-      "deltaP10Pips": 68,
-      "breakevenP10Usd": 0.6027878856267369,
-      "shareAboveBreakevenP10": 0.9927445100125761,
-      "feeMedianPips": 645,
-      "deltaMedianPips": 145,
-      "breakevenMedianUsd": 0.28268673256978005,
-      "shareAboveBreakevenMedian": 0.9947438005868885
+      "feeP10Pips": 565,
+      "deltaP10Pips": 65,
+      "breakevenP10Usd": 0.7076932655449663,
+      "shareAboveBreakevenP10": 0.9900035471284383,
+      "feeMedianPips": 643,
+      "deltaMedianPips": 143,
+      "breakevenMedianUsd": 0.3216787570658937,
+      "shareAboveBreakevenMedian": 0.9945180742317242
     }
   ]
 }

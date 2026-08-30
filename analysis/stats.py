@@ -256,7 +256,8 @@ def windward_replay(data, fee_min=500, fee_max=10000, fee_per_sigma=200, top_n=5
                         alpha=0.3, dt clamped to [1,3600], observation cap 1e12
       v2_wad_only       + WAD carried through the division AND the sqrt. Nothing else.
       v3_wad_plus_decay + time-based decay (half-life 300) replacing the EMA
-      v4_full           + dt==0 identity and the 1e8 observation cap  (== the contract)
+      v4_full           + dt==0 identity, the 1e8 observation cap, and DECAY ON READ
+                        (== the contract)
     """
     WAD = 10**18
     ALPHA_V1 = 3 * 10**17
@@ -276,11 +277,19 @@ def windward_replay(data, fee_min=500, fee_max=10000, fee_per_sigma=200, top_n=5
             var, lt, lts = 0, rows[0]["tick"], rows[0]["block"]
             fees, zeros, considered = [], 0, 0
             for r in rows[1:]:
+                raw_dt = r["block"] - lts
                 if mode == "v1":
                     fees.append(min(fee_max, fee_min + math.isqrt(var // WAD) * fee_per_sigma))
+                elif mode == "v4":
+                    # DECAY ON READ (finding H-1). The shipped contract decays the stored
+                    # estimate forward to the current timestamp before pricing, so a quiet
+                    # pool quotes a falling fee with no trade required. Read-only: `var`
+                    # itself is not written here, exactly as in `_varianceNow`.
+                    rd = min(raw_dt, 7 * 86400)
+                    vr = (vm.decay_factor(rd, HALF_LIFE) * var) // WAD if rd else var
+                    fees.append(min(fee_max, fee_min + (math.isqrt(vr * WAD) * fee_per_sigma) // WAD))
                 else:
                     fees.append(min(fee_max, fee_min + (math.isqrt(var * WAD) * fee_per_sigma) // WAD))
-                raw_dt = r["block"] - lts
                 if mode == "v4" and raw_dt == 0:
                     continue  # dt==0 identity; anchor held
                 dt = max(1, min(3600, raw_dt)) if mode in ("v1", "v2", "v3") else min(raw_dt, 7 * 86400)
@@ -319,7 +328,24 @@ def windward_replay(data, fee_min=500, fee_max=10000, fee_per_sigma=200, top_n=5
         out.append({"pool": pid, "swaps": len(rows),
                     "shipped_v1": arm("v1"), "ablation_wadOnly": arm("v2"),
                     "ablation_wadPlusDecay": arm("v3"), "repaired": arm("v4")})
+
     return out
+
+
+def swap_weighted_floor(replay):
+    """Swap-weighted fee-floor share across the replayed pools, per arm.
+
+    Persisted rather than left for prose to compute: every figure the README quotes must be
+    readable out of data/stats.json, never arrived at by hand (D-0017).
+    """
+    total = sum(p["swaps"] for p in replay)
+    if not total:
+        return {}
+    return {
+        "swaps": total,
+        "shipped_v1_pctAtFeeFloor": round(sum(p["shipped_v1"]["pctAtFeeFloor"] * p["swaps"] for p in replay) / total, 1),
+        "repaired_pctAtFeeFloor": round(sum(p["repaired"]["pctAtFeeFloor"] * p["swaps"] for p in replay) / total, 1),
+    }
 
 
 def main():
@@ -335,7 +361,8 @@ def main():
         "microstructure": microstructure(data),
         "priorityFee": priority_fee_analysis(data),
         "priceDynamics": price_dynamics(data),
-        "windwardReplay": windward_replay(data),
+        "windwardReplay": (_wr := windward_replay(data)),
+        "windwardReplaySwapWeighted": swap_weighted_floor(_wr),
     }
 
     if args.json:
