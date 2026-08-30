@@ -128,7 +128,8 @@ should be considered for a partner track prize.
 |---|---|
 | `src/` | The hook and its estimator |
 | `analysis/` | The study; `run.sh` reproduces every number here |
-| `demo/index.html` | Visual walkthrough of the result (`analysis/make_demo_page.py`) |
+| `web/` | Next.js site: the result, plus a live fee simulator (`npm run dev`) |
+| `demo/index.html` | Same walkthrough as one static file, no build step needed |
 | `data/*.json` | **Every published figure is read from these files** |
 | `docs/ABLATION.md` | The truncation bug, and which repair did what |
 | `docs/GAS.md` | Gas overhead in dollars, and the breakeven swap |
