@@ -1,14 +1,13 @@
 import type { Metadata } from "next";
-import { Newsreader, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
+import { Sora, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
 
-const serif = Newsreader({
+const display = Sora({
   subsets: ["latin"],
-  weight: ["400", "500"],
-  style: ["normal", "italic"],
-  variable: "--font-serif",
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-display",
   display: "swap",
 });
 const sans = IBM_Plex_Sans({
@@ -28,14 +27,15 @@ export const metadata: Metadata = {
   title: "Windward",
   description:
     "A Uniswap v4 hook that prices volatility from the pool's own tick history — and the shuffled-null control built to falsify it.",
+  icons: { icon: "/windward-mark.png" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={`${serif.variable} ${sans.variable} ${mono.variable}`}>
+      <body className={`${display.variable} ${sans.variable} ${mono.variable}`}>
         <Nav />
-        {children}
+        <div className="grid-bg">{children}</div>
         <Footer />
       </body>
     </html>
