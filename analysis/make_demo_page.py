@@ -3,9 +3,11 @@
     python3 analysis/make_demo_page.py      # writes demo/index.html
 
 Every number on the page is read out of data/economics.json, data/stats.json,
-data/gas_overhead.json or data/gas_economics.json at build time (D-0017). The page is
-self-contained: inline CSS and inline SVG, no network, no CDN, no build step. Open it
-straight from disk.
+data/gas_overhead.json or data/gas_economics.json at build time (D-0017).
+
+The page is one self-contained file: inline CSS, inline SVG, no build step. Web fonts are
+requested from Google Fonts but every stack has a real fallback, so the page still reads
+correctly with no network — which matters, because the rest of the demo runs offline.
 """
 
 import json
@@ -20,28 +22,48 @@ def load(name):
         return json.load(f)
 
 
-def bars(series, ymax, accent, label_every=1):
-    """A column chart as inline SVG. Values are drawn to a shared ymax so two charts
-    placed side by side are directly comparable — that comparison is the whole point."""
-    w, h, pad = 340, 190, 26
-    bw = (w - pad * 2) / len(series) * 0.72
-    gap = (w - pad * 2) / len(series)
-    out = []
+def chart(series, ymax, fill, hatch=False):
+    """A column chart as inline SVG.
+
+    Both charts on the page are drawn to a shared `ymax`, because the comparison between them
+    is the entire argument — a chart rescaled to its own data would hide the effect.
+    The null series is hatched rather than merely tinted, so it reads as noise at a glance.
+    """
+    w, h, pad_l, pad_b, pad_t = 360, 208, 30, 30, 16
+    n = len(series)
+    slot = (w - pad_l - 14) / n
+    bw = slot * 0.66
+    parts = []
     for i, v in enumerate(series):
-        bh = max(1.5, (v / ymax) * (h - pad * 2))
-        x = pad + i * gap + (gap - bw) / 2
-        y = h - pad - bh
-        out.append(
-            f'<rect x="{x:.1f}" y="{y:.1f}" width="{bw:.1f}" height="{bh:.1f}" rx="2" fill="{accent}"/>'
+        bh = max(2.0, (v / ymax) * (h - pad_b - pad_t))
+        x = pad_l + i * slot + (slot - bw) / 2
+        y = h - pad_b - bh
+        parts.append(
+            f'<rect x="{x:.1f}" y="{y:.1f}" width="{bw:.1f}" height="{bh:.1f}" '
+            f'fill="{"url(#hatch)" if hatch else fill}" stroke="{fill}" stroke-width="1"/>'
         )
-        if (i + 1) % label_every == 0:
-            out.append(
-                f'<text x="{x + bw / 2:.1f}" y="{h - pad + 13:.0f}" text-anchor="middle" '
-                f'class="ax">{i + 1}</text>'
+        if i in (0, n - 1):
+            parts.append(
+                f'<text x="{x + bw / 2:.1f}" y="{y - 6:.1f}" text-anchor="middle" '
+                f'class="val">{v:g}</text>'
             )
-    out.append(f'<line x1="{pad}" y1="{h - pad:.0f}" x2="{w - pad}" y2="{h - pad:.0f}" class="axl"/>')
+        parts.append(
+            f'<text x="{x + bw / 2:.1f}" y="{h - pad_b + 15:.0f}" text-anchor="middle" '
+            f'class="ax">{i + 1}</text>'
+        )
+    # Gridlines carry the shared scale; without them "same axis" is a claim, not a fact.
+    for g in range(1, 5):
+        gy = h - pad_b - (g / 4) * (h - pad_b - pad_t)
+        parts.insert(0, f'<line x1="{pad_l}" y1="{gy:.1f}" x2="{w - 8}" y2="{gy:.1f}" class="grid"/>')
+        parts.insert(1, f'<text x="{pad_l - 7}" y="{gy + 3.5:.1f}" text-anchor="end" '
+                        f'class="ax">{(g / 4) * ymax:.0f}</text>')
+    parts.append(f'<line x1="{pad_l}" y1="{h - pad_b}" x2="{w - 8}" y2="{h - pad_b}" class="axis"/>')
     return (
-        f'<svg viewBox="0 0 {w} {h}" role="img" aria-label="column chart">' + "".join(out) + "</svg>"
+        f'<svg viewBox="0 0 {w} {h}" role="img">'
+        '<defs><pattern id="hatch" width="5" height="5" patternTransform="rotate(45)" '
+        'patternUnits="userSpaceOnUse">'
+        '<line x1="0" y="0" x2="0" y2="5" class="hl"/></pattern></defs>'
+        + "".join(parts) + "</svg>"
     )
 
 
@@ -51,240 +73,302 @@ def main():
     micro, sw = stats["microstructure"], stats["windwardReplaySwapWeighted"]
     pools = econ["pools"]
 
-    ymax = max(
-        max(d["meanForwardMove"] for d in p[k]["decileLift"])
-        for p in pools
-        for k in ("real", "shuffledNull")
-    ) * 1.08
+    ymax = max(d["meanForwardMove"] for p in pools for k in ("real", "shuffledNull")
+               for d in p[k]["decileLift"]) * 1.12
 
     panels = []
     for i, p in enumerate(pools):
         r = [d["meanForwardMove"] for d in p["real"]["decileLift"]]
-        n = [d["meanForwardMove"] for d in p["shuffledNull"]["decileLift"]]
-        lo = p["real"]["decileLift"][0]["feeMin"]
-        hi = p["real"]["decileLift"][-1]["feeMax"]
+        nl = [d["meanForwardMove"] for d in p["shuffledNull"]["decileLift"]]
+        lo, hi = p["real"]["decileLift"][0]["feeMin"], p["real"]["decileLift"][-1]["feeMax"]
         panels.append(f"""
 <div class="panel" data-pool="{i}"{'' if i == 0 else ' hidden'}>
-  <div class="charts">
+  <div class="twin">
     <figure>
-      <figcaption><span class="dot real"></span>Real Unichain order</figcaption>
-      {bars(r, ymax, 'var(--accent)')}
-      <div class="cap">fee climbs {lo} → {hi} pips across deciles</div>
+      <figcaption><span class="key sig"></span>Real order</figcaption>
+      {chart(r, ymax, 'var(--signal)')}
+      <p class="cap">Fee rises {lo}&thinsp;&rarr;&thinsp;{hi} pips across the deciles.</p>
     </figure>
     <figure>
-      <figcaption><span class="dot null"></span>Same moves, shuffled</figcaption>
-      {bars(n, ymax, 'var(--muted-bar)')}
-      <div class="cap">identical distribution, order destroyed</div>
+      <figcaption><span class="key nul"></span>Shuffled</figcaption>
+      {chart(nl, ymax, 'var(--noise)', hatch=True)}
+      <p class="cap">Same moves, same gaps. Order destroyed.</p>
     </figure>
   </div>
   <div class="verdict">
-    <div><b>{p['liftDecile10OverDecile1']:.2f}&times;</b><span>top vs bottom decile</span></div>
-    <div class="vs">vs</div>
-    <div><b class="dim">{p['liftDecile10OverDecile1_shuffledNull']:.2f}&times;</b><span>shuffled null</span></div>
-    <div class="rho">Spearman &rho; <b>{p['real']['spearmanFeeVsForwardVariance']}</b>
-      &nbsp;/&nbsp; null <b class="dim">{p['shuffledNull']['spearmanFeeVsForwardVariance']}</b></div>
+    <div class="big"><b>{p['liftDecile10OverDecile1']:.2f}&times;</b>
+      <span>top decile / bottom decile</span></div>
+    <div class="big"><b class="mute">{p['liftDecile10OverDecile1_shuffledNull']:.2f}&times;</b>
+      <span>same test, shuffled</span></div>
+    <div class="rho">Spearman&nbsp;&rho; vs forward variance<br>
+      <b>{p['real']['spearmanFeeVsForwardVariance']}</b> real
+      &nbsp;·&nbsp; <b class="mute">{p['shuffledNull']['spearmanFeeVsForwardVariance']}</b> null</div>
   </div>
 </div>""")
 
     tabs = "".join(
-        f'<button class="tab{" on" if i == 0 else ""}" data-t="{i}">'
-        f'{p["pool"][:8]}…<span>{p["swaps"]:,}</span></button>'
-        for i, p in enumerate(pools)
-    )
+        f'<button class="tab{" on" if i == 0 else ""}" data-t="{i}" type="button">'
+        f'<em>{p["pool"][:8]}…</em><span>{p["swaps"]:,} swaps</span></button>'
+        for i, p in enumerate(pools))
 
     dv = [p["real"]["spread"]["distinctFeeValues"] for p in pools]
     nv = [p["shuffledNull"]["spread"]["distinctFeeValues"] for p in pools]
-    lifts = [p["liftDecile10OverDecile1"] for p in pools]
-    nlifts = [p["liftDecile10OverDecile1_shuffledNull"] for p in pools]
+    lf = [p["liftDecile10OverDecile1"] for p in pools]
+    nf = [p["liftDecile10OverDecile1_shuffledNull"] for p in pools]
     v1 = stats["windwardReplay"][0]["shipped_v1"]
     v4 = stats["windwardReplay"][0]["repaired"]
     v1d = [w["shipped_v1"]["distinctFeeValues"] for w in stats["windwardReplay"]]
     v4d = [w["repaired"]["distinctFeeValues"] for w in stats["windwardReplay"]]
+    be = max(q["breakevenP10Usd"] for q in gecon["pools"])
+    sh = min(q["shareAboveBreakevenP10"] for q in gecon["pools"]) * 100
 
-    html = f"""<title>Windward — pricing volatility on Uniswap v4</title>
+    html = f"""<title>Windward</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 :root{{
-  --bg:#0e1116; --panel:#161b23; --line:#252c37; --fg:#e8edf5; --dim:#95a1b3;
-  --accent:#4ade80; --muted-bar:#3b4552; --warn:#fbbf24;
+  --paper:#f6f7f9; --raise:#ffffff; --rule:#dde1e7; --rule-2:#eaedf1;
+  --ink:#11161d; --ink-2:#4a5665; --ink-3:#77828f;
+  --signal:#14566b; --signal-soft:#e3eef2;
+  --noise:#9aa5b4; --flag:#9c3d26;
+  --serif:"Newsreader",Georgia,"Times New Roman",serif;
+  --sans:"IBM Plex Sans",ui-sans-serif,-apple-system,"Segoe UI",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}}
+@media (prefers-color-scheme:dark){{
+  :root:not([data-theme="light"]){{
+    --paper:#0d1218; --raise:#141b23; --rule:#28313d; --rule-2:#1c242e;
+    --ink:#e7ecf2; --ink-2:#aab5c3; --ink-3:#7d8895;
+    --signal:#57b6d0; --signal-soft:#152a33; --noise:#5d6a79; --flag:#d4886c;
+  }}
+}}
+:root[data-theme="dark"]{{
+  --paper:#0d1218; --raise:#141b23; --rule:#28313d; --rule-2:#1c242e;
+  --ink:#e7ecf2; --ink-2:#aab5c3; --ink-3:#7d8895;
+  --signal:#57b6d0; --signal-soft:#152a33; --noise:#5d6a79; --flag:#d4886c;
 }}
 *{{box-sizing:border-box}}
-body{{margin:0;background:var(--bg);color:var(--fg);
-  font:16px/1.6 ui-sans-serif,-apple-system,"Segoe UI",Inter,system-ui,sans-serif;}}
-.wrap{{max-width:1080px;margin:0 auto;padding:48px 28px 96px}}
-section{{padding:44px 0;border-bottom:1px solid var(--line)}}
-section:last-child{{border:0}}
-h1{{font-size:44px;line-height:1.15;margin:0 0 14px;letter-spacing:-.02em}}
-h2{{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);
-  margin:0 0 18px;font-weight:600}}
-h3{{font-size:26px;margin:0 0 12px;letter-spacing:-.01em}}
-p{{margin:0 0 14px;max-width:66ch;color:#c9d3e0}}
-.lede{{font-size:19px;color:var(--fg)}}
-b.hi{{color:var(--accent)}}
-.meta{{display:flex;gap:26px;flex-wrap:wrap;margin-top:26px;padding-top:22px;
-  border-top:1px solid var(--line)}}
-.meta div{{font-size:13px;color:var(--dim)}}
-.meta b{{display:block;font-size:21px;color:var(--fg);font-weight:650}}
-.tabs{{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px}}
-.tab{{background:var(--panel);border:1px solid var(--line);color:var(--dim);
-  padding:8px 13px;border-radius:8px;font:inherit;font-size:13px;cursor:pointer}}
-.tab span{{display:block;font-size:11px;opacity:.65}}
-.tab.on{{border-color:var(--accent);color:var(--fg)}}
-.charts{{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:20px}}
-figure{{margin:0;background:var(--panel);border:1px solid var(--line);
-  border-radius:12px;padding:16px}}
-figcaption{{font-size:13px;color:var(--dim);margin-bottom:6px;display:flex;
-  align-items:center;gap:8px}}
-.dot{{width:9px;height:9px;border-radius:50%;display:inline-block}}
-.dot.real{{background:var(--accent)}} .dot.null{{background:var(--muted-bar)}}
-svg{{width:100%;height:auto;display:block}}
-.ax{{fill:var(--dim);font-size:9px}} .axl{{stroke:var(--line)}}
-.cap{{font-size:12px;color:var(--dim);margin-top:8px}}
-.verdict{{display:flex;align-items:center;gap:22px;flex-wrap:wrap;margin-top:20px;
-  background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 20px}}
-.verdict b{{font-size:32px;display:block;line-height:1.1;color:var(--accent)}}
-.verdict b.dim{{color:var(--dim)}}
-.verdict span{{font-size:12px;color:var(--dim)}}
-.vs{{color:var(--dim);font-size:13px}}
-.rho{{margin-left:auto;font-size:13px;color:var(--dim)}}
-.rho b{{display:inline;font-size:15px;color:var(--fg)}}
-.rho b.dim{{color:var(--dim)}}
-table{{width:100%;border-collapse:collapse;margin:16px 0;font-size:14px}}
-th,td{{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line)}}
-th{{color:var(--dim);font-weight:600;font-size:12px;letter-spacing:.06em;
-  text-transform:uppercase}}
-td.no{{color:var(--warn)}} td.ok{{color:var(--accent)}}
-.grid2{{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px}}
-.card{{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px}}
-.card h4{{margin:0 0 8px;font-size:15px}}
-.card p{{font-size:14px;margin:0;color:var(--dim)}}
-code{{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;
-  background:#1d232c;padding:2px 6px;border-radius:4px}}
-.addr{{font-family:ui-monospace,Menlo,monospace;font-size:13px;word-break:break-all;
-  color:var(--accent)}}
-ol{{color:#c9d3e0;max-width:66ch}} ol li{{margin-bottom:9px}}
-@media(max-width:620px){{h1{{font-size:32px}}.wrap{{padding:32px 18px 64px}}}}
+body{{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+  font-size:16.5px;line-height:1.62;-webkit-font-smoothing:antialiased}}
+.page{{max-width:960px;margin:0 auto;padding:64px 32px 112px}}
+section{{padding:52px 0;border-top:1px solid var(--rule-2)}}
+section:first-of-type{{border-top:0;padding-top:8px}}
+p{{max-width:64ch;margin:0 0 15px;color:var(--ink-2)}}
+.eyebrow{{font-family:var(--mono);font-size:11.5px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--ink-3);margin:0 0 20px}}
+h1{{font-family:var(--serif);font-weight:400;font-size:clamp(38px,6.2vw,60px);
+  line-height:1.07;letter-spacing:-.018em;margin:0 0 22px;text-wrap:balance;color:var(--ink)}}
+h1 em{{font-style:italic;color:var(--signal)}}
+h2{{font-family:var(--serif);font-weight:400;font-size:clamp(25px,3.4vw,33px);
+  line-height:1.2;letter-spacing:-.012em;margin:0 0 14px;text-wrap:balance;color:var(--ink)}}
+.lede{{font-size:19.5px;line-height:1.55;color:var(--ink);max-width:60ch}}
+strong{{color:var(--ink);font-weight:600}}
+.sig{{color:var(--signal);font-weight:600}}
+.facts{{display:flex;flex-wrap:wrap;gap:36px;margin-top:34px;padding-top:26px;
+  border-top:1px solid var(--rule)}}
+.facts div{{font-family:var(--mono);font-size:11.5px;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--ink-3)}}
+.facts b{{display:block;font-family:var(--serif);font-size:30px;font-weight:500;
+  letter-spacing:-.01em;color:var(--ink);text-transform:none;font-variant-numeric:tabular-nums}}
+.tabs{{display:flex;gap:7px;flex-wrap:wrap;margin:26px 0 22px}}
+.tab{{background:none;border:1px solid var(--rule);border-radius:2px;cursor:pointer;
+  padding:8px 12px;text-align:left;color:var(--ink-3);font-family:var(--mono);font-size:11.5px;
+  line-height:1.35}}
+.tab em{{display:block;font-style:normal;color:var(--ink-2)}}
+.tab span{{font-size:10.5px;opacity:.75}}
+.tab:hover{{border-color:var(--ink-3)}}
+.tab.on{{border-color:var(--signal);background:var(--signal-soft)}}
+.tab.on em{{color:var(--signal)}}
+.tab:focus-visible{{outline:2px solid var(--signal);outline-offset:2px}}
+.twin{{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:20px}}
+figure{{margin:0;background:var(--raise);border:1px solid var(--rule);border-radius:3px;
+  padding:18px 18px 14px}}
+figcaption{{display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11.5px;
+  letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px}}
+.key{{width:11px;height:11px;flex:none;border:1px solid var(--signal)}}
+.key.sig{{background:var(--signal)}}
+.key.nul{{border-color:var(--noise);background:repeating-linear-gradient(45deg,
+  var(--noise) 0 1px,transparent 1px 4px)}}
+svg{{width:100%;height:auto;display:block;overflow:visible}}
+.ax{{fill:var(--ink-3);font-family:var(--mono);font-size:9px}}
+.val{{fill:var(--ink);font-family:var(--mono);font-size:10.5px;font-weight:500}}
+.grid{{stroke:var(--rule-2)}} .axis{{stroke:var(--rule)}} .hl{{stroke:var(--noise);stroke-width:1.6}}
+.cap{{font-size:13px;color:var(--ink-3);margin:10px 0 0;max-width:none}}
+.verdict{{display:flex;align-items:flex-end;gap:44px;flex-wrap:wrap;margin-top:20px;
+  padding-top:20px;border-top:1px solid var(--rule)}}
+.big b{{display:block;font-family:var(--serif);font-size:46px;font-weight:500;line-height:1;
+  letter-spacing:-.02em;color:var(--signal);font-variant-numeric:tabular-nums}}
+.big b.mute{{color:var(--noise)}}
+.big span{{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink-3)}}
+.rho{{margin-left:auto;font-family:var(--mono);font-size:11.5px;line-height:1.75;
+  color:var(--ink-3);text-align:right}}
+.rho b{{color:var(--ink);font-weight:500}} .rho b.mute{{color:var(--noise)}}
+.tw{{width:100%;overflow-x:auto;margin:22px 0}}
+table{{width:100%;border-collapse:collapse;font-size:14.5px;font-variant-numeric:tabular-nums}}
+th{{font-family:var(--mono);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--ink-3);font-weight:400;text-align:left;padding:0 16px 9px 0;
+  border-bottom:1px solid var(--rule)}}
+td{{padding:12px 16px 12px 0;border-bottom:1px solid var(--rule-2);color:var(--ink-2)}}
+td:first-child{{color:var(--ink)}}
+td.num{{font-family:var(--mono);font-size:13.5px}}
+.cut{{color:var(--flag)}} .keep{{color:var(--signal)}}
+.cards{{display:grid;grid-template-columns:repeat(auto-fit,minmax(255px,1fr));gap:1px;
+  background:var(--rule);border:1px solid var(--rule);margin-top:8px}}
+.card{{background:var(--paper);padding:22px}}
+.card h3{{font-family:var(--sans);font-size:14px;font-weight:600;margin:0 0 8px;color:var(--ink)}}
+.card p{{font-size:13.5px;margin:0;color:var(--ink-2)}}
+.addr{{font-family:var(--mono);font-size:12px;word-break:break-all;color:var(--signal);
+  margin:0 0 8px}}
+ol{{max-width:64ch;padding-left:1.15em;color:var(--ink-2)}}
+ol li{{margin-bottom:11px;padding-left:4px}}
+ol li::marker{{font-family:var(--mono);font-size:12px;color:var(--ink-3)}}
+code{{font-family:var(--mono);font-size:.88em;color:var(--ink)}}
+.foot{{font-size:13.5px;color:var(--ink-3);margin-top:30px;padding-top:18px;
+  border-top:1px solid var(--rule-2)}}
+@media (prefers-reduced-motion:no-preference){{
+  .panel{{animation:fade .28s ease-out}}
+  @keyframes fade{{from{{opacity:0}}to{{opacity:1}}}}
+}}
+@media(max-width:640px){{.page{{padding:40px 20px 72px}}.facts{{gap:24px}}.verdict{{gap:26px}}
+  .rho{{margin-left:0;text-align:left}}}}
 </style>
 
-<div class="wrap">
+<div class="page">
 
 <section>
-  <h2>Uniswap v4 · UHI10 Hookathon</h2>
-  <h1>Windward prices volatility,<br>and we tried to prove it doesn't.</h1>
-  <p class="lede">A v4 hook that raises the swap fee when the pool is moving and lowers it when
-  the pool is calm — from the pool's own tick history. No oracle, no external call, no admin key.</p>
-  <p>Plenty of hooks claim a fee tracks volatility. The hard part is showing it isn't noise.
-  So we built the control that could have killed our own result — and ran it first on our own
-  headline numbers, which failed it.</p>
-  <div class="meta">
+  <p class="eyebrow">Uniswap v4 · UHI10 Hookathon</p>
+  <h1>A fee that reads the pool's own volatility — and the test that <em>could have killed it</em>.</h1>
+  <p class="lede">Windward raises the swap fee when a pool is moving and lowers it when the pool is
+  calm, from tick history alone. No oracle, no external call, no admin key.</p>
+  <p>Plenty of hooks claim their fee tracks volatility. The hard part is showing it isn't noise
+  dressed up as signal. So we built the control that could have falsified our own result — and
+  ran it first against our own headline numbers, which did not survive it.</p>
+  <div class="facts">
     <div><b>{micro['swaps']:,}</b>swaps analysed</div>
     <div><b>{micro['spanDays']:.0f} days</b>of Unichain v4</div>
     <div><b>{sw['swaps']:,}</b>swaps replayed</div>
-    <div><b>{gas['gasOverhead']:,}</b>gas overhead</div>
+    <div><b>{gas['gasOverhead']:,}</b>gas per swap</div>
   </div>
 </section>
 
 <section>
-  <h2>The result</h2>
-  <h3>When Windward charges more, more actually happens next.</h3>
-  <p>Bucket every swap by the fee it was charged, then measure the tick move that <em>followed</em>.
-  If the fee is informative, the top decile should precede bigger moves than the bottom one.
-  <b class="hi">It does — and the control says that isn't an accident.</b></p>
+  <p class="eyebrow">The result</p>
+  <h2>When Windward charges more, more actually happens next.</h2>
+  <p>Bucket every swap by the fee it was charged, then measure the tick move that
+  <em>followed</em> it. If the fee carries information, the top decile should precede larger
+  moves than the bottom decile. <strong class="sig">It does.</strong></p>
   <div class="tabs">{tabs}</div>
   {''.join(panels)}
-  <p style="margin-top:20px"><b>The control.</b> Shuffle each pool's real
-  <code>(tick move, block gap)</code> observations into a random order. Same multiset, same heavy
-  tail, same median, same maximum — only the <em>clustering</em> is destroyed. Every pool:
-  real <b class="hi">{min(lifts):.2f}–{max(lifts):.2f}&times;</b>, shuffled
-  <b>{min(nlifts):.2f}–{max(nlifts):.2f}&times;</b>.</p>
+  <p style="margin-top:26px"><strong>The control.</strong> Shuffle each pool's real
+  <code>(tick move, block gap)</code> pairs into a random order. Same multiset, same heavy tail,
+  same median, same maximum — only the <em>clustering</em> is destroyed. Both charts share one
+  axis. Across all five pools: real <strong class="sig">{min(lf):.2f}–{max(lf):.2f}&times;</strong>,
+  shuffled <strong>{min(nf):.2f}–{max(nf):.2f}&times;</strong>.</p>
 </section>
 
 <section>
-  <h2>The part most submissions skip</h2>
-  <h3>We ran the control on our own headline metrics. They failed.</h3>
-  <p>Before this, our README led on two numbers. Both are reproduced by shuffled noise — one pool's
-  null scores <em>better</em> than the real data. Neither can tell a working fee from a random one,
-  so we cut them from the pitch.</p>
-  <table>
-    <tr><th>Metric we used to lead with</th><th>Real</th><th>Shuffled noise</th><th>Verdict</th></tr>
-    <tr><td>Never sits at the fee floor</td><td>0.0%</td><td>0.0%</td>
-        <td class="no">Proves nothing — cut</td></tr>
-    <tr><td>Distinct fee values</td><td>{min(dv):,}–{max(dv):,}</td>
-        <td>{min(nv):,}–{max(nv):,}</td><td class="no">Null wins a pool — cut</td></tr>
-    <tr><td>Decile lift vs realised move</td><td>{min(lifts):.2f}–{max(lifts):.2f}&times;</td>
-        <td>{min(nlifts):.2f}–{max(nlifts):.2f}&times;</td>
-        <td class="ok">Survives — this is the claim</td></tr>
-  </table>
-  <p>Read effect sizes, not significance: at {sw['swaps']:,} swaps an economically worthless
-  correlation still clears any threshold.</p>
+  <p class="eyebrow">The part most submissions skip</p>
+  <h2>We ran that control against our own headline metrics. They failed.</h2>
+  <p>This project used to lead on two numbers. Shuffled noise reproduces both — and on one pool
+  the null scores <em>better</em> than the real data. Neither can separate a working fee from a
+  random one, so they were cut from the claim rather than quietly kept.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Metric</th><th>Real</th><th>Shuffled noise</th><th>Outcome</th></tr></thead>
+    <tbody>
+      <tr><td>Never sits at the fee floor</td><td class="num">0.0%</td><td class="num">0.0%</td>
+        <td class="cut">Cut — proves nothing</td></tr>
+      <tr><td>Distinct fee values</td><td class="num">{min(dv):,}–{max(dv):,}</td>
+        <td class="num">{min(nv):,}–{max(nv):,}</td>
+        <td class="cut">Cut — the null wins a pool</td></tr>
+      <tr><td>Decile lift vs realised move</td>
+        <td class="num">{min(lf):.2f}–{max(lf):.2f}&times;</td>
+        <td class="num">{min(nf):.2f}–{max(nf):.2f}&times;</td>
+        <td class="keep">Kept — this is the claim</td></tr>
+    </tbody>
+  </table></div>
+  <p>Effect sizes, not significance: at {sw['swaps']:,} swaps an economically worthless
+  correlation still clears any threshold you like.</p>
 </section>
 
 <section>
-  <h2>Why the study existed at all</h2>
-  <h3>Real data caught a bug that a green test suite hid.</h3>
+  <p class="eyebrow">Why the study existed</p>
+  <h2>Real order flow caught a bug that a green test suite was hiding.</h2>
   <p>Integer truncation in <code>(dTick²)/dt</code> rounded
-  <b>{v1['pctObservationsRoundingToZero']}%</b> of real observations to <b>zero</b>. The "dynamic"
-  fee sat at its floor on <b>{sw['shipped_v1_pctAtFeeFloor']}%</b> of swaps and took just
-  <b>{min(v1d)}–{max(v1d)}</b> distinct values. It was a static fee wearing a dynamic fee's
-  clothes — and every unit test passed, because they used synthetic swaps large enough to hide it.</p>
-  <table>
-    <tr><th></th><th>Before</th><th>After</th></tr>
-    <tr><td>Observations truncated to zero</td><td class="no">{v1['pctObservationsRoundingToZero']}%</td>
-        <td class="ok">{v4['pctObservationsRoundingToZero']}%</td></tr>
-    <tr><td>Swaps priced at the fee floor</td><td class="no">{sw['shipped_v1_pctAtFeeFloor']}%</td>
-        <td class="ok">{sw['repaired_pctAtFeeFloor']}%</td></tr>
-    <tr><td>Distinct fee values</td><td class="no">{min(v1d)}–{max(v1d)}</td>
-        <td class="ok">{min(v4d):,}–{max(v4d):,}</td></tr>
-  </table>
-  <p>Real Unichain flow is small and fast — median move <b>{micro['tickMoveMedian']} tick</b>,
-  median gap <b>{micro['blockGapMedian']} blocks</b>, <b>{micro['pctSameBlockConsecutiveSwaps']}%</b>
-  of consecutive swaps share a block. Synthetic tests never went near that regime.</p>
+  <strong>{v1['pctObservationsRoundingToZero']}%</strong> of real observations to
+  <strong>zero</strong>. The "dynamic" fee sat at its floor on
+  <strong>{sw['shipped_v1_pctAtFeeFloor']}%</strong> of swaps and took
+  <strong>{min(v1d)}–{max(v1d)}</strong> distinct values — a static fee wearing a dynamic fee's
+  clothes. Every unit test passed throughout, because they used synthetic swaps large enough to
+  step over the truncation entirely.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Busiest pool</th><th>Before</th><th>After</th></tr></thead>
+    <tbody>
+      <tr><td>Observations truncated to zero</td>
+        <td class="num cut">{v1['pctObservationsRoundingToZero']}%</td>
+        <td class="num keep">{v4['pctObservationsRoundingToZero']}%</td></tr>
+      <tr><td>Swaps priced at the fee floor</td>
+        <td class="num cut">{sw['shipped_v1_pctAtFeeFloor']}%</td>
+        <td class="num keep">{sw['repaired_pctAtFeeFloor']}%</td></tr>
+      <tr><td>Distinct fee values</td><td class="num cut">{min(v1d)}–{max(v1d)}</td>
+        <td class="num keep">{min(v4d):,}–{max(v4d):,}</td></tr>
+    </tbody>
+  </table></div>
+  <p>Real Unichain flow is small and fast: median move <strong>{micro['tickMoveMedian']} tick</strong>,
+  median gap <strong>{micro['blockGapMedian']} blocks</strong>, and
+  <strong>{micro['pctSameBlockConsecutiveSwaps']}%</strong> of consecutive swaps share a block.
+  Synthetic tests never went near that regime.</p>
 </section>
 
 <section>
-  <h2>Engineering</h2>
-  <div class="grid2">
-    <div class="card"><h4>Cannot move funds</h4><p>Both callbacks return zero deltas and all four
-      <code>*_RETURNS_DELTA</code> address bits are clear, so v4 never parses a delta from it.
-      No owner, pause, upgrade or setter — every parameter is immutable.</p></div>
-    <div class="card"><h4>Deployed and verified</h4><p class="addr">0x609634584d5BD12Ba4216116528e364d385Ad0C0</p>
-      <p>Unichain Sepolia. Runtime bytecode matched against a local deploy-profile build — the only
+  <p class="eyebrow">Engineering</p>
+  <div class="cards">
+    <div class="card"><h3>It cannot move funds</h3><p>Both callbacks return zero deltas and all
+      four <code>*_RETURNS_DELTA</code> address bits are clear, so v4 never parses a delta from
+      it. No owner, pause, upgrade path or setter — every parameter is immutable.</p></div>
+    <div class="card"><h3>Deployed, bytecode verified</h3>
+      <p class="addr">0x609634584d5BD12Ba4216116528e364d385Ad0C0</p>
+      <p>Unichain Sepolia. Runtime code matched against a local deploy-profile build; the only
       differences are the immutable slots, each confirmed through its getter.</p></div>
-    <div class="card"><h4>61 tests, both profiles</h4><p>Eight security findings fixed, each pinned
-      by a regression test written while it still failed. One remains open and is documented
-      rather than quietly dropped.</p></div>
-    <div class="card"><h4>Costs {gecon['gasCostUsd'] * 100:.4f}¢ a swap</h4>
-      <p>{gas['gasOverhead']:,} gas, {gas['overheadPctOfUnhooked']}% of an unhooked swap. A swap
-      clears breakeven above roughly ${max(p['breakevenP10Usd'] for p in gecon['pools']):.2f};
-      {min(p['shareAboveBreakevenP10'] for p in gecon['pools']) * 100:.1f}%+ of real swaps do.</p></div>
+    <div class="card"><h3>61 tests, two profiles</h3><p>Eight security findings fixed, each pinned
+      by a regression test written while it still failed. One remains open, documented rather
+      than quietly dropped.</p></div>
+    <div class="card"><h3>{gecon['gasCostUsd'] * 100:.4f}&cent; per swap</h3>
+      <p>{gas['gasOverhead']:,} gas, {gas['overheadPctOfUnhooked']}% of an unhooked swap. Breakeven
+      lands near <strong>${be:.2f}</strong> a trade, which {sh:.1f}%+ of real swaps clear.</p></div>
   </div>
 </section>
 
 <section>
-  <h2>What we are not claiming</h2>
+  <p class="eyebrow">What we are not claiming</p>
+  <h2>The limits, stated before anyone has to ask.</h2>
   <ol>
-    <li><b>The LP benefit is unvalidated.</b> We measure fee revenue, not LP PnL, and there is no
-      demand-elasticity model for flow that leaves at a higher fee.</li>
-    <li><b>This is a heuristic.</b> Motivated by the loss-versus-rebalancing literature — not an
-      implementation of any optimal policy from it. The word <em>optimal</em> is not used.</li>
-    <li><b>The lift is a correlation.</b> It shows the fee is charged at the right <em>times</em>,
-      not that the revenue exceeds the adverse selection it offsets.</li>
-    <li><b>One open finding.</b> A same-block round trip can strand the tick anchor. It cannot move
-      funds and costs the griefer more than the target, but a production deployment must fix it.</li>
-    <li><b>Scope.</b> Five busiest pools, one chain, one 7-day window. The thin-pool regime is
-      untested.</li>
+    <li><strong>The LP benefit is unvalidated.</strong> We measure fee revenue, not LP PnL, and
+      there is no demand-elasticity model for flow that leaves at a higher fee.</li>
+    <li><strong>This is a heuristic.</strong> Motivated by the loss-versus-rebalancing literature,
+      not an implementation of any optimal policy from it. The word <em>optimal</em> is not used.</li>
+    <li><strong>The lift is a correlation.</strong> It shows the fee is charged at the right
+      <em>times</em>, not that the revenue exceeds the adverse selection it offsets.</li>
+    <li><strong>One finding is open.</strong> A same-block round trip can strand the tick anchor.
+      It cannot move funds and costs the griefer more than the target, but a production
+      deployment must fix it.</li>
+    <li><strong>Scope.</strong> Five busiest pools, one chain, one seven-day window. The
+      thin-pool regime is untested.</li>
   </ol>
-  <p style="margin-top:18px">Every number on this page is generated from committed JSON by
+  <p class="foot">Every figure on this page is generated from committed JSON by
   <code>analysis/make_demo_page.py</code>. <code>analysis/run.sh</code> rebuilds all of it from
   the chain.</p>
 </section>
 
 </div>
 <script>
-document.querySelectorAll('.tab').forEach(function(t){{
-  t.addEventListener('click', function(){{
-    var i = t.dataset.t;
-    document.querySelectorAll('.tab').forEach(function(x){{ x.classList.toggle('on', x === t); }});
-    document.querySelectorAll('.panel').forEach(function(p){{ p.hidden = p.dataset.pool !== i; }});
+document.querySelectorAll(".tab").forEach(function (t) {{
+  t.addEventListener("click", function () {{
+    document.querySelectorAll(".tab").forEach(function (x) {{ x.classList.toggle("on", x === t); }});
+    document.querySelectorAll(".panel").forEach(function (p) {{
+      p.hidden = p.dataset.pool !== t.dataset.t;
+    }});
   }});
 }});
 </script>
