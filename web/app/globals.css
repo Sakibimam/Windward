@@ -342,3 +342,22 @@ td.num { font-family: var(--font-mono), monospace; font-size: 13.5px; white-spac
 .swap-msg { font-size: 12.5px; color: var(--ink-2); margin: 16px 0 0; max-width: none; }
 .swap-err { font-size: 12.5px; color: var(--flag); margin: 16px 0 0; max-width: none; }
 .swap-foot { font-size: 11.5px; color: var(--ink-3); margin: 16px 0 0; max-width: none; }
+
+/* ------------------------------------------------------------- findings */
+.findings {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(268px, 1fr));
+  gap: 1px; background: var(--rule); border: 1px solid var(--rule); margin: 36px 0 8px;
+}
+.finding { background: var(--paper); padding: 22px; }
+.finding .tag {
+  font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 2px; display: inline-block; margin-bottom: 12px;
+}
+.finding.bad .tag { color: var(--flag); border: 1px solid var(--flag); }
+.finding.good .tag { color: var(--signal); border: 1px solid var(--signal); background: var(--signal-soft); }
+.finding h3 {
+  font-family: var(--font-serif), Georgia, serif; font-weight: 400; font-size: 23px;
+  letter-spacing: -0.01em; margin: 0 0 10px; color: var(--ink);
+}
+.finding p { font-size: 13.5px; margin: 0; color: var(--ink-2); max-width: none; }
+.finding.good { background: var(--sunk); }

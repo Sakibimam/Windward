@@ -1,29 +1,40 @@
 # Windward
 
-**A Uniswap v4 hook that raises the swap fee when the pool is moving and lowers it when the pool
-is calm, using nothing but the pool's own recent price history.**
+**We measured the two most-cited signals for MEV-aware swap fees on Unichain. Both are inverted.
+This is the third one — the one that survived a null designed to kill it — and the v4 hook that
+prices it.**
 
 UHI10 Hookathon · *The Fair Flow Frontier*
 
 Live on Unichain Sepolia: **`0x609634584d5BD12Ba4216116528e364d385Ad0C0`** — runtime bytecode
 verified against source (`docs/DEPLOYMENT.md`).
 
-## What it does
+## Two signals the field believes in, measured on 426,807 real Unichain swaps
 
-A static fee tier is wrong most of the time: too high when nothing is happening, too low exactly
-when prices are moving — which is when informed order flow is most expensive for liquidity
-providers. Windward prices that difference per swap.
+**Priority fee — inverted.** The argument that a searcher's tip reveals their extraction, and a
+hook can tax it, assumes a contested priority auction. On Unichain
+**82.7%** of swaps are already the first for their pool in
+their block — there is barely any contest to reveal anything.
+Retail through the Universal Router pays a median tip of **1,450,000 wei** — a flat
+wallet default. The arbitrage proxy pays **83,161 wei**, and
+**83.8%** of it pays below the median retail swap
+(**17.4×**, n=619). A priority-keyed fee here taxes retail
+and subsidises arbitrage.
 
-**How.** After each swap the hook reads the new tick straight from the `PoolManager` and folds
-the squared tick move, divided by elapsed time, into a time-decayed variance estimate. Before the
-next swap it takes the square root, scales it, adds a floor and clamps to a ceiling, returning
-that fee to v4 with the override flag for that swap only. Observations lose weight on a
-300-second half-life, so a quiet pool drifts back to the floor on its own.
+**Price staleness — also inverted.** The LVR argument says an idle pool accumulates divergence, so
+the next trade is more toxic. Bucketing every consecutive swap pair by the gap between them, the
+longest-gap decile precedes **smaller** moves, not larger: lift **0.69–0.94×**
+against a shuffled null of **0.92–1.06×**, in all five busiest pools. On this
+chain an idle pool is evidence the market is calm, not that an option has accrued.
+(`analysis/staleness.py`. Magnitude not claimed — v4 logs post-swap ticks, so each interval
+includes its closing swap's impact. The sign is what this measures.)
 
-**What it never does.** No oracle, no external call on the swap path, no priority-fee assumption,
-and no owner, pause, upgrade or setter — every parameter is `immutable`. Both callbacks return
-zero deltas and all four `*_RETURNS_DELTA` address bits are clear, so v4 never even parses a
-delta from it. **Windward cannot move funds. It can only price them.**
+**What survived.** Realised tick variance, computed from the pool's own history. Bucket every swap
+by the fee it was charged and measure the move that followed: the top decile precedes moves
+**1.35–6.52×** larger than the bottom, against a null of
+**0.99–1.13×**. Same null, same discipline, opposite outcome.
+
+Windward is the hook that prices that third signal — no oracle, no external call, no admin key.
 
 ## Does the fee actually track volatility?
 
@@ -127,9 +138,19 @@ The six that most affect how the result should be read. All ten are in `docs/LIM
 
 ## Partner integrations
 
-**None.** Windward integrates no partner technology. It has no oracle, no external call on the
-swap path, and no dependency beyond Uniswap v4 core and periphery. Nothing in this repository
-should be considered for a partner track prize.
+**Unichain** — the only one, and it is load-bearing rather than decorative:
+
+- The hook is deployed and bytecode-verified on **Unichain Sepolia** (chain 1301) —
+  `docs/DEPLOYMENT.md`, address and receipt read back from chain.
+- The entire empirical study is Unichain mainnet data: 426,807 swaps over 7 days, ingested by
+  `analysis/fetch.py`, pinned to a fixed end block in `analysis/PINNED_END_BLOCK`.
+- Both inversion findings are **specific to Unichain's microstructure** and would not hold on a
+  congested L1 — `analysis/stats.py` (priority fee) and `analysis/staleness.py` (staleness).
+- `script/SeedPool.s.sol` and `script/Trade.s.sol` create and trade a live pool against the
+  deployed hook using Unichain Sepolia's own `PoolSwapTest` router.
+
+No other partner technology is used. Nothing else in this repository should be considered for a
+partner track.
 
 ## Repository map
 
@@ -137,6 +158,7 @@ should be considered for a partner track prize.
 |---|---|
 | `src/` | The hook and its estimator |
 | `analysis/` | The study; `run.sh` reproduces every number here |
+| `analysis/staleness.py` | The staleness inversion, with its null |
 | `web/` | Next.js site: the result, a fee simulator, and a live on-chain read |
 | `demo/index.html` | Same walkthrough as one static file, no build step needed |
 | `data/*.json` | **Every published figure is read from these files** |

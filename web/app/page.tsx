@@ -2,6 +2,7 @@ import LiftSection from "@/components/LiftSection";
 import Link from "next/link";
 import {
   micro, swapWeighted, gas, gasEcon, liftRange, nullLiftRange, breakeven, shareAbove, fmt,
+  staleLift, staleNull, retailTip, arbTip, arbN, tipRatio, pctArbBelowRetail, pctFirstOfBlock,
 } from "@/lib/data";
 import { DEPLOYED } from "@/lib/volatility";
 
@@ -15,19 +16,50 @@ export default function Page() {
         <div className="shell">
           <p className="eyebrow">Uniswap v4 · UHI10 Hookathon</p>
           <h1 className="display hero-h">
-            A fee that reads the pool&rsquo;s own volatility —<br />
-            and the test that <em>could have killed it</em>.
+            Two signals the field prices MEV with.<br />
+            On Unichain, both are <em>inverted</em>.
           </h1>
           <p className="lede narrow">
-            Windward raises the swap fee while a pool is moving and lets it fall as the pool goes
-            quiet, from tick history alone. No oracle, no external call, no admin key.
+            We measured them on {fmt(micro.swaps)} real Unichain swaps. Then we measured a third,
+            against a null built to kill it — and that one survived. Windward is the v4 hook that
+            prices the survivor.
           </p>
-          <p className="narrow">
-            Plenty of hooks claim their fee tracks volatility. The hard part is showing it is not
-            noise wearing a signal&rsquo;s clothes. So we built the control that could have
-            falsified our own result — and ran it first against our own headline numbers, which
-            did not survive it.
-          </p>
+
+          <div className="findings">
+            <div className="finding bad">
+              <span className="mono tag">Inverted</span>
+              <h3>Priority fee</h3>
+              <p>
+                Taxing a searcher&rsquo;s tip assumes a contested auction. On Unichain{" "}
+                {pctFirstOfBlock}% of swaps are already first for their pool in their block.
+                Retail tips a median {fmt(retailTip)} wei; the arbitrage proxy tips{" "}
+                {fmt(arbTip)} wei, and {pctArbBelowRetail}% of it pays below the median retail
+                swap ({tipRatio}×, n={arbN}). The tax would land on retail.
+              </p>
+            </div>
+            <div className="finding bad">
+              <span className="mono tag">Inverted</span>
+              <h3>Price staleness</h3>
+              <p>
+                An idle pool is meant to accumulate divergence for the next arbitrageur. Bucketed
+                by gap since the last trade, the longest-gap decile precedes{" "}
+                <em>smaller</em> moves: {staleLift[0].toFixed(2)}–{staleLift[1].toFixed(2)}×
+                against a null of {staleNull[0].toFixed(2)}–{staleNull[1].toFixed(2)}×. Idle
+                means calm, not stale.
+              </p>
+            </div>
+            <div className="finding good">
+              <span className="mono tag">Survived</span>
+              <h3>Realised variance</h3>
+              <p>
+                The pool&rsquo;s own tick history. Top fee decile precedes moves{" "}
+                {liftRange[0].toFixed(2)}–{liftRange[1].toFixed(2)}× larger than the bottom,
+                against a null of {nullLiftRange[0].toFixed(2)}–{nullLiftRange[1].toFixed(2)}×.
+                Same test, opposite outcome.
+              </p>
+            </div>
+          </div>
+
           <div className="facts">
             <div><b className="tnum">{fmt(micro.swaps)}</b><span className="mono">swaps analysed</span></div>
             <div><b className="tnum">{micro.spanDays.toFixed(0)} days</b><span className="mono">of Unichain v4</span></div>

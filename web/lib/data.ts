@@ -8,6 +8,7 @@ import economics from "@/data/economics.json";
 import stats from "@/data/stats.json";
 import gasOverhead from "@/data/gas_overhead.json";
 import gasEconomics from "@/data/gas_economics.json";
+import staleness from "@/data/staleness.json";
 
 export type Decile = {
   decile: number;
@@ -69,5 +70,17 @@ export const v1Distinct = range(replay.map((r) => r.shipped_v1.distinctFeeValues
 export const v4Distinct = range(replay.map((r) => r.repaired.distinctFeeValues));
 export const breakeven = Math.max(...gasEcon.pools.map((p) => p.breakevenP10Usd));
 export const shareAbove = Math.min(...gasEcon.pools.map((p) => p.shareAboveBreakevenP10)) * 100;
+
+/** The two signals that failed, and the one that survived. */
+export const stalePools = staleness.pools;
+export const staleLift = range(stalePools.map((p) => p.liftDecile10OverDecile1));
+export const staleNull = range(stalePools.map((p) => p.liftDecile10OverDecile1_shuffledNull));
+export const priority = stats.priorityFee;
+export const retailTip = priority.groups[0].median;
+export const arbTip = priority.groups[2].median;
+export const arbN = priority.groups[2].n;
+export const tipRatio = priority.retail_over_C2_median_ratio;
+export const pctArbBelowRetail = priority.pct_C2_below_retail_median;
+export const pctFirstOfBlock = micro.pctSwapsFirstOfBlockForTheirPool;
 
 export const fmt = (n: number) => n.toLocaleString("en-US");

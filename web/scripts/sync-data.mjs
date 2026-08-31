@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const from = join(here, "..", "..", "data");
 const to = join(here, "..", "data");
-const files = ["economics.json", "stats.json", "gas_overhead.json", "gas_economics.json"];
+const files = ["economics.json", "stats.json", "staleness.json", "gas_overhead.json", "gas_economics.json"];
 
 mkdirSync(to, { recursive: true });
 for (const f of files) {
