@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Newsreader, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
+import Nav from "@/components/Nav";
+import Footer from "@/components/Footer";
 
 const serif = Newsreader({
   subsets: ["latin"],
@@ -31,7 +33,11 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={`${serif.variable} ${sans.variable} ${mono.variable}`}>{children}</body>
+      <body className={`${serif.variable} ${sans.variable} ${mono.variable}`}>
+        <Nav />
+        {children}
+        <Footer />
+      </body>
     </html>
   );
 }
