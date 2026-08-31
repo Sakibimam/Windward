@@ -60,6 +60,18 @@ export default function Page() {
             </div>
           </div>
 
+          <div className="hero-actions">
+            <Link href="/demo" className="btn">Open the live demo</Link>
+            <a
+              className="btn ghost"
+              href="https://github.com/Sakibimam/Windward"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Read the code
+            </a>
+          </div>
+
           <div className="facts">
             <div><b className="tnum">{fmt(micro.swaps)}</b><span className="mono">swaps analysed</span></div>
             <div><b className="tnum">{micro.spanDays.toFixed(0)} days</b><span className="mono">of Unichain v4</span></div>
@@ -124,6 +136,52 @@ export default function Page() {
             trade yourself.
           </p>
           <Link href="/demo" className="btn big">Open the live demo</Link>
+        </div>
+      </section>
+
+      {/* --------------------------------------------------------- how it works */}
+      <section>
+        <div className="shell">
+          <p className="eyebrow">How it works</p>
+          <h2 className="head">Four steps, entirely inside the pool.</h2>
+          <p className="narrow">
+            Windward never leaves the contract. It reads what v4 already records, folds it into a
+            decaying estimate, and prices the next swap from it — no oracle, no external call, no
+            keeper, nothing to trust but the pool&rsquo;s own history.
+          </p>
+          <div className="steps">
+            <div className="step">
+              <h3>Read the tick the protocol wrote</h3>
+              <p>
+                After every swap, <code>afterSwap</code> reads the pool&rsquo;s new tick straight
+                from the <code>PoolManager</code>. The observation is written by v4 itself, so a
+                caller cannot forge it.
+              </p>
+            </div>
+            <div className="step">
+              <h3>Fold it into a decaying variance</h3>
+              <p>
+                The squared tick move, divided by elapsed time, enters an EWMA whose weight halves
+                every 300 seconds. WAD scaling is carried <em>through</em> the division — doing it
+                the other way round is the bug the study found.
+              </p>
+            </div>
+            <div className="step">
+              <h3>Price the next swap from it</h3>
+              <p>
+                <code>beforeSwap</code> decays the stored estimate forward to now, takes its square
+                root, scales it, adds a floor and clamps to a ceiling — then hands v4 that fee with
+                the override flag, for that swap only.
+              </p>
+            </div>
+            <div className="step">
+              <h3>Let quiet pools fall back on their own</h3>
+              <p>
+                Because the decay is applied on read, elapsed time alone lowers the fee. A pool
+                driven to the 1% ceiling returns to its floor without anybody having to trade it.
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 
