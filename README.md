@@ -68,7 +68,16 @@ python3 analysis/test_differential.py  # model <-> contract agreement
 analysis/run.sh                        # 102s warm; a cold run refetches 541MB
 analysis/run.sh --quick                # smoke test only — NOT a reproduction
 script/demo.sh                         # 6.8s cold, fully offline
+
+# a live pool on a local fork, then watch the fee move across blocks
+anvil --fork-url https://sepolia.unichain.org --auto-impersonate
+forge script script/SeedPool.s.sol:SeedPool --rpc-url http://localhost:8545 \
+  --sender 0x30c7eE328B80ce1dc15AC8F75e1FfAf51B9bB9Fb --unlocked --broadcast
+cd web && npm install && npm run dev     # http://localhost:3000
 ```
+
+Swaps only move the estimate when they land in **different blocks** — `dt == 0` is an identity,
+which is what closes the dust-swap attack. Run `script/Trade.s.sol` repeatedly, not once.
 
 ## Testing
 
@@ -128,7 +137,7 @@ should be considered for a partner track prize.
 |---|---|
 | `src/` | The hook and its estimator |
 | `analysis/` | The study; `run.sh` reproduces every number here |
-| `web/` | Next.js site: the result, plus a live fee simulator (`npm run dev`) |
+| `web/` | Next.js site: the result, a fee simulator, and a live on-chain read |
 | `demo/index.html` | Same walkthrough as one static file, no build step needed |
 | `data/*.json` | **Every published figure is read from these files** |
 | `docs/ABLATION.md` | The truncation bug, and which repair did what |

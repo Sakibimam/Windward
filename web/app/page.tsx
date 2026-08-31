@@ -1,5 +1,6 @@
 import LiftSection from "@/components/LiftSection";
 import Simulator from "@/components/Simulator";
+import LiveFee from "@/components/LiveFee";
 import {
   micro, swapWeighted, gas, gasEcon, v1, v4, v1Distinct, v4Distinct,
   liftRange, nullLiftRange, distinctRealRange, distinctNullRange,
@@ -51,6 +52,13 @@ export default function Page() {
             trading and watch it decay back toward the floor on its own.
           </p>
           <Simulator />
+
+          <h3 className="sub-head">And this is the same contract, on chain, right now.</h3>
+          <p className="narrow">
+            The simulator above is the contract&rsquo;s arithmetic running locally. The panel below
+            is the deployed hook itself — read live, no wallet required.
+          </p>
+          <LiveFee />
         </div>
       </section>
 
