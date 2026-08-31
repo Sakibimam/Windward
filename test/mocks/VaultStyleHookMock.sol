@@ -12,12 +12,12 @@ import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "@uniswap/v4-core/src/type
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {CurrencySettler} from "@uniswap/v4-core/test/utils/CurrencySettler.sol";
 
-/// @notice A minimal stand-in for the hook class Keel targets: a vault-style wrapper that owns
+/// @notice A minimal stand-in for a vault-style hook: a wrapper that owns
 /// its own LP position and exposes user-facing entry points, rather than making users call the
 /// PoolManager directly.
 ///
 /// It exists only to characterise v4's `noSelfCall` semantics for Phase 1. It has no share
-/// accounting and no security properties. It is NOT a Keel component and must never be deployed.
+/// accounting and no security properties. It is NOT part of Windward and must never be deployed.
 ///
 /// Every callback simply counts its own invocation, so a test can distinguish "the PoolManager
 /// invoked this hook" from "the PoolManager silently skipped it".

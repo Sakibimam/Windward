@@ -13,9 +13,9 @@ import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 import {VaultStyleHookMock} from "./mocks/VaultStyleHookMock.sol";
 
-/// @notice Phase 1 characterisation tests. These do not test Keel — Keel does not exist yet.
-/// They pin down the v4 semantics that determine whether Keel CAN exist, so that Phase 4 argues
-/// against verified behaviour rather than against assumptions.
+/// @notice Phase 1 characterisation tests. These predate the hook and do not exercise it.
+/// They pin down the v4 semantics any such hook depends on, so that later phases argue against
+/// verified behaviour rather than against assumptions.
 ///
 /// Every assertion here corresponds to a claim in docs/RECON-hooks.md.
 contract Phase1V4SemanticsTest is Test, Deployers {

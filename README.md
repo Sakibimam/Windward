@@ -182,7 +182,6 @@ partner track.
 | `analysis/` | The study; `run.sh` reproduces every number here |
 | `analysis/staleness.py` | The staleness inversion, with its null |
 | `web/` | Next.js site: the result, a fee simulator, and a live on-chain read |
-| `demo/index.html` | Same walkthrough as one static file, no build step needed |
 | `data/*.json` | **Every published figure is read from these files** |
 | `docs/ABLATION.md` | The truncation bug, and which repair did what |
 | `docs/GAS.md` | Gas overhead in dollars, and the breakeven swap |
