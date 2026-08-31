@@ -84,9 +84,9 @@ body {
 .shell { width: 100%; max-width: 1280px; margin: 0 auto; padding: 0 28px; }
 .rails { border-left: 1px solid var(--rule-2); border-right: 1px solid var(--rule-2); }
 .narrow { max-width: 66ch; }
-section { padding: 88px 0; border-top: 1px solid var(--rule-2); }
+section { padding: clamp(44px, 5vw, 66px) 0; border-top: 1px solid var(--rule-2); }
 @media (max-width: 760px) {
-  section { padding: 56px 0; }
+  section { padding: 40px 0; }
   .shell { padding: 0 18px; }
 }
 
@@ -154,9 +154,9 @@ a { color: var(--signal); text-underline-offset: 3px; }
 @media (max-width: 640px) { .nav-in { gap: 12px; } .nav-links { gap: 0; } .nav-l.ext { display: none; } }
 
 /* -------------------------------------------------------------- page heads */
-.hero { padding: 92px 0 76px; }
+.hero { padding: clamp(56px, 6vw, 84px) 0 clamp(44px, 4.5vw, 64px); }
 .hero-h { font-size: clamp(38px, 6.4vw, 66px); margin-bottom: 24px; }
-.page-head { padding: 68px 0 20px; }
+.page-head { padding: clamp(48px, 5vw, 64px) 0 8px; }
 .page-h { font-size: clamp(32px, 5vw, 50px); margin-bottom: 18px; }
 @media (max-width: 760px) { .hero { padding: 56px 0 44px; } .page-head { padding: 44px 0 14px; } }
 
