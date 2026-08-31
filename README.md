@@ -116,6 +116,12 @@ The six that most affect how the result should be read. All ten are in `docs/LIM
    charged at the right *times*. It does not show the revenue exceeds the adverse selection it is
    meant to offset. See #2.
 
+## Partner integrations
+
+**None.** Windward integrates no partner technology. It has no oracle, no external call on the
+swap path, and no dependency beyond Uniswap v4 core and periphery. Nothing in this repository
+should be considered for a partner track prize.
+
 ## Repository map
 
 | Path | What |

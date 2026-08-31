@@ -5,6 +5,12 @@ pragma solidity 0.8.26;
 /// @notice Finds a CREATE2 salt whose resulting address carries exactly the hook permission
 /// bits Uniswap v4 requires.
 ///
+/// @dev **Attribution.** This is a reimplementation of the same well-known search that
+/// v4-periphery ships at `test/shared/HookMiner.sol`, and the `find` signature matches theirs.
+/// It was rewritten rather than imported because that file lives under `test/`, and because this
+/// version bounds the loop explicitly and returns `(salt, address)`. Credit for the approach
+/// belongs upstream.
+///
 /// @dev v4 encodes a hook's permissions in the low 14 bits of its ADDRESS
 /// (`Hooks.sol:27-47`), and `Hooks.validateHookPermissions` — which `WindwardHook`'s
 /// constructor calls — reverts unless those bits match the declared permission set exactly.
