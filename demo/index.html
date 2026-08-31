@@ -1,0 +1,292 @@
+<title>Windward — pricing volatility on Uniswap v4</title>
+<style>
+:root{
+  --bg:#0e1116; --panel:#161b23; --line:#252c37; --fg:#e8edf5; --dim:#95a1b3;
+  --accent:#4ade80; --muted-bar:#3b4552; --warn:#fbbf24;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+  font:16px/1.6 ui-sans-serif,-apple-system,"Segoe UI",Inter,system-ui,sans-serif;}
+.wrap{max-width:1080px;margin:0 auto;padding:48px 28px 96px}
+section{padding:44px 0;border-bottom:1px solid var(--line)}
+section:last-child{border:0}
+h1{font-size:44px;line-height:1.15;margin:0 0 14px;letter-spacing:-.02em}
+h2{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);
+  margin:0 0 18px;font-weight:600}
+h3{font-size:26px;margin:0 0 12px;letter-spacing:-.01em}
+p{margin:0 0 14px;max-width:66ch;color:#c9d3e0}
+.lede{font-size:19px;color:var(--fg)}
+b.hi{color:var(--accent)}
+.meta{display:flex;gap:26px;flex-wrap:wrap;margin-top:26px;padding-top:22px;
+  border-top:1px solid var(--line)}
+.meta div{font-size:13px;color:var(--dim)}
+.meta b{display:block;font-size:21px;color:var(--fg);font-weight:650}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px}
+.tab{background:var(--panel);border:1px solid var(--line);color:var(--dim);
+  padding:8px 13px;border-radius:8px;font:inherit;font-size:13px;cursor:pointer}
+.tab span{display:block;font-size:11px;opacity:.65}
+.tab.on{border-color:var(--accent);color:var(--fg)}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:20px}
+figure{margin:0;background:var(--panel);border:1px solid var(--line);
+  border-radius:12px;padding:16px}
+figcaption{font-size:13px;color:var(--dim);margin-bottom:6px;display:flex;
+  align-items:center;gap:8px}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.dot.real{background:var(--accent)} .dot.null{background:var(--muted-bar)}
+svg{width:100%;height:auto;display:block}
+.ax{fill:var(--dim);font-size:9px} .axl{stroke:var(--line)}
+.cap{font-size:12px;color:var(--dim);margin-top:8px}
+.verdict{display:flex;align-items:center;gap:22px;flex-wrap:wrap;margin-top:20px;
+  background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 20px}
+.verdict b{font-size:32px;display:block;line-height:1.1;color:var(--accent)}
+.verdict b.dim{color:var(--dim)}
+.verdict span{font-size:12px;color:var(--dim)}
+.vs{color:var(--dim);font-size:13px}
+.rho{margin-left:auto;font-size:13px;color:var(--dim)}
+.rho b{display:inline;font-size:15px;color:var(--fg)}
+.rho b.dim{color:var(--dim)}
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:14px}
+th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line)}
+th{color:var(--dim);font-weight:600;font-size:12px;letter-spacing:.06em;
+  text-transform:uppercase}
+td.no{color:var(--warn)} td.ok{color:var(--accent)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px}
+.card h4{margin:0 0 8px;font-size:15px}
+.card p{font-size:14px;margin:0;color:var(--dim)}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;
+  background:#1d232c;padding:2px 6px;border-radius:4px}
+.addr{font-family:ui-monospace,Menlo,monospace;font-size:13px;word-break:break-all;
+  color:var(--accent)}
+ol{color:#c9d3e0;max-width:66ch} ol li{margin-bottom:9px}
+@media(max-width:620px){h1{font-size:32px}.wrap{padding:32px 18px 64px}}
+</style>
+
+<div class="wrap">
+
+<section>
+  <h2>Uniswap v4 · UHI10 Hookathon</h2>
+  <h1>Windward prices volatility,<br>and we tried to prove it doesn't.</h1>
+  <p class="lede">A v4 hook that raises the swap fee when the pool is moving and lowers it when
+  the pool is calm — from the pool's own tick history. No oracle, no external call, no admin key.</p>
+  <p>Plenty of hooks claim a fee tracks volatility. The hard part is showing it isn't noise.
+  So we built the control that could have killed our own result — and ran it first on our own
+  headline numbers, which failed it.</p>
+  <div class="meta">
+    <div><b>426,807</b>swaps analysed</div>
+    <div><b>7 days</b>of Unichain v4</div>
+    <div><b>290,640</b>swaps replayed</div>
+    <div><b>12,221</b>gas overhead</div>
+  </div>
+</section>
+
+<section>
+  <h2>The result</h2>
+  <h3>When Windward charges more, more actually happens next.</h3>
+  <p>Bucket every swap by the fee it was charged, then measure the tick move that <em>followed</em>.
+  If the fee is informative, the top decile should precede bigger moves than the bottom one.
+  <b class="hi">It does — and the control says that isn't an accident.</b></p>
+  <div class="tabs"><button class="tab on" data-t="0">0xc4f393…<span>89,048</span></button><button class="tab" data-t="1">0x75b192…<span>76,313</span></button><button class="tab" data-t="2">0x3258f4…<span>71,915</span></button><button class="tab" data-t="3">0x04b7dd…<span>31,011</span></button><button class="tab" data-t="4">0x51f9d6…<span>22,353</span></button></div>
+  
+<div class="panel" data-pool="0">
+  <div class="charts">
+    <figure>
+      <figcaption><span class="dot real"></span>Real Unichain order</figcaption>
+      <svg viewBox="0 0 340 190" role="img" aria-label="column chart"><rect x="30.0" y="140.0" width="20.7" height="24.0" rx="2" fill="var(--accent)"/><text x="40.4" y="177" text-anchor="middle" class="ax">1</text><rect x="58.8" y="135.6" width="20.7" height="28.4" rx="2" fill="var(--accent)"/><text x="69.2" y="177" text-anchor="middle" class="ax">2</text><rect x="87.6" y="136.7" width="20.7" height="27.3" rx="2" fill="var(--accent)"/><text x="98.0" y="177" text-anchor="middle" class="ax">3</text><rect x="116.4" y="134.8" width="20.7" height="29.2" rx="2" fill="var(--accent)"/><text x="126.8" y="177" text-anchor="middle" class="ax">4</text><rect x="145.2" y="134.1" width="20.7" height="29.9" rx="2" fill="var(--accent)"/><text x="155.6" y="177" text-anchor="middle" class="ax">5</text><rect x="174.0" y="129.4" width="20.7" height="34.6" rx="2" fill="var(--accent)"/><text x="184.4" y="177" text-anchor="middle" class="ax">6</text><rect x="202.8" y="127.5" width="20.7" height="36.5" rx="2" fill="var(--accent)"/><text x="213.2" y="177" text-anchor="middle" class="ax">7</text><rect x="231.6" y="122.3" width="20.7" height="41.7" rx="2" fill="var(--accent)"/><text x="242.0" y="177" text-anchor="middle" class="ax">8</text><rect x="260.4" y="107.9" width="20.7" height="56.1" rx="2" fill="var(--accent)"/><text x="270.8" y="177" text-anchor="middle" class="ax">9</text><rect x="289.2" y="49.4" width="20.7" height="114.6" rx="2" fill="var(--accent)"/><text x="299.6" y="177" text-anchor="middle" class="ax">10</text><line x1="26" y1="164" x2="314" y2="164" class="axl"/></svg>
+      <div class="cap">fee climbs 500 → 2767 pips across deciles</div>
+    </figure>
+    <figure>
+      <figcaption><span class="dot null"></span>Same moves, shuffled</figcaption>
+      <svg viewBox="0 0 340 190" role="img" aria-label="column chart"><rect x="30.0" y="122.6" width="20.7" height="41.4" rx="2" fill="var(--muted-bar)"/><text x="40.4" y="177" text-anchor="middle" class="ax">1</text><rect x="58.8" y="122.0" width="20.7" height="42.0" rx="2" fill="var(--muted-bar)"/><text x="69.2" y="177" text-anchor="middle" class="ax">2</text><rect x="87.6" y="121.4" width="20.7" height="42.6" rx="2" fill="var(--muted-bar)"/><text x="98.0" y="177" text-anchor="middle" class="ax">3</text><rect x="116.4" y="122.5" width="20.7" height="41.5" rx="2" fill="var(--muted-bar)"/><text x="126.8" y="177" text-anchor="middle" class="ax">4</text><rect x="145.2" y="121.4" width="20.7" height="42.6" rx="2" fill="var(--muted-bar)"/><text x="155.6" y="177" text-anchor="middle" class="ax">5</text><rect x="174.0" y="122.1" width="20.7" height="41.9" rx="2" fill="var(--muted-bar)"/><text x="184.4" y="177" text-anchor="middle" class="ax">6</text><rect x="202.8" y="122.0" width="20.7" height="42.0" rx="2" fill="var(--muted-bar)"/><text x="213.2" y="177" text-anchor="middle" class="ax">7</text><rect x="231.6" y="120.4" width="20.7" height="43.6" rx="2" fill="var(--muted-bar)"/><text x="242.0" y="177" text-anchor="middle" class="ax">8</text><rect x="260.4" y="122.1" width="20.7" height="41.9" rx="2" fill="var(--muted-bar)"/><text x="270.8" y="177" text-anchor="middle" class="ax">9</text><rect x="289.2" y="121.0" width="20.7" height="43.0" rx="2" fill="var(--muted-bar)"/><text x="299.6" y="177" text-anchor="middle" class="ax">10</text><line x1="26" y1="164" x2="314" y2="164" class="axl"/></svg>
+      <div class="cap">identical distribution, order destroyed</div>
+    </figure>
+  </div>
+  <div class="verdict">
+    <div><b>4.78&times;</b><span>top vs bottom decile</span></div>
+    <div class="vs">vs</div>
+    <div><b class="dim">1.04&times;</b><span>shuffled null</span></div>
+    <div class="rho">Spearman &rho; <b>0.2501</b>
+      &nbsp;/&nbsp; null <b class="dim">0.0129</b></div>
+  </div>
+</div>
+<div class="panel" data-pool="1" hidden>
+  <div class="charts">
+    <figure>
+      <figcaption><span class="dot real"></span>Real Unichain order</figcaption>
+      <svg viewBox="0 0 340 190" role="img" aria-label="column chart"><rect x="30.0" y="144.4" width="20.7" height="19.6" rx="2" fill="var(--accent)"/><text x="40.4" y="177" text-anchor="middle" class="ax">1</text><rect x="58.8" y="145.3" width="20.7" height="18.7" rx="2" fill="var(--accent)"/><text x="69.2" y="177" text-anchor="middle" class="ax">2</text><rect x="87.6" y="142.5" width="20.7" height="21.5" rx="2" fill="var(--accent)"/><text x="98.0" y="177" text-anchor="middle" class="ax">3</text><rect x="116.4" y="144.2" width="20.7" height="19.8" rx="2" fill="var(--accent)"/><text x="126.8" y="177" text-anchor="middle" class="ax">4</text><rect x="145.2" y="143.6" width="20.7" height="20.4" rx="2" fill="var(--accent)"/><text x="155.6" y="177" text-anchor="middle" class="ax">5</text><rect x="174.0" y="142.8" width="20.7" height="21.2" rx="2" fill="var(--accent)"/><text x="184.4" y="177" text-anchor="middle" class="ax">6</text><rect x="202.8" y="142.2" width="20.7" height="21.8" rx="2" fill="var(--accent)"/><text x="213.2" y="177" text-anchor="middle" class="ax">7</text><rect x="231.6" y="140.2" width="20.7" height="23.8" rx="2" fill="var(--accent)"/><text x="242.0" y="177" text-anchor="middle" class="ax">8</text><rect x="260.4" y="135.9" width="20.7" height="28.1" rx="2" fill="var(--accent)"/><text x="270.8" y="177" text-anchor="middle" class="ax">9</text><rect x="289.2" y="36.2" width="20.7" height="127.8" rx="2" fill="var(--accent)"/><text x="299.6" y="177" text-anchor="middle" class="ax">10</text><line x1="26" y1="164" x2="314" y2="164" class="axl"/></svg>
+      <div class="cap">fee climbs 500 → 10000 pips across deciles</div>
+    </figure>
+    <figure>
+      <figcaption><span class="dot null"></span>Same moves, shuffled</figcaption>
+      <svg viewBox="0 0 340 190" role="img" aria-label="column chart"><rect x="30.0" y="134.2" width="20.7" height="29.8" rx="2" fill="var(--muted-bar)"/><text x="40.4" y="177" text-anchor="middle" class="ax">1</text><rect x="58.8" y="131.9" width="20.7" height="32.1" rx="2" fill="var(--muted-bar)"/><text x="69.2" y="177" text-anchor="middle" class="ax">2</text><rect x="87.6" y="130.8" width="20.7" height="33.2" rx="2" fill="var(--muted-bar)"/><text x="98.0" y="177" text-anchor="middle" class="ax">3</text><rect x="116.4" y="133.6" width="20.7" height="30.4" rx="2" fill="var(--muted-bar)"/><text x="126.8" y="177" text-anchor="middle" class="ax">4</text><rect x="145.2" y="130.0" width="20.7" height="34.0" rx="2" fill="var(--muted-bar)"/><text x="155.6" y="177" text-anchor="middle" class="ax">5</text><rect x="174.0" y="127.9" width="20.7" height="36.1" rx="2" fill="var(--muted-bar)"/><text x="184.4" y="177" text-anchor="middle" class="ax">6</text><rect x="202.8" y="132.6" width="20.7" height="31.4" rx="2" fill="var(--muted-bar)"/><text x="213.2" y="177" text-anchor="middle" class="ax">7</text><rect x="231.6" y="134.5" width="20.7" height="29.5" rx="2" fill="var(--muted-bar)"/><text x="242.0" y="177" text-anchor="middle" class="ax">8</text><rect x="260.4" y="131.7" width="20.7" height="32.3" rx="2" fill="var(--muted-bar)"/><text x="270.8" y="177" text-anchor="middle" class="ax">9</text><rect x="289.2" y="130.3" width="20.7" height="33.7" rx="2" fill="var(--muted-bar)"/><text x="299.6" y="177" text-anchor="middle" class="ax">10</text><line x1="26" y1="164" x2="314" y2="164" class="axl"/></svg>
+      <div class="cap">identical distribution, order destroyed</div>
+    </figure>
+  </div>
+  <div class="verdict">
+    <div><b>6.52&times;</b><span>top vs bottom decile</span></div>
+    <div class="vs">vs</div>
+    <div><b class="dim">1.13&times;</b><span>shuffled null</span></div>
+    <div class="rho">Spearman &rho; <b>0.1965</b>
+      &nbsp;/&nbsp; null <b class="dim">0.0135</b></div>
+  </div>
+</div>
+<div class="panel" data-pool="2" hidden>
+  <div class="charts">
+    <figure>
+      <figcaption><span class="dot real"></span>Real Unichain order</figcaption>
+      <svg viewBox="0 0 340 190" role="img" aria-label="column chart"><rect x="30.0" y="151.6" width="20.7" height="12.4" rx="2" fill="var(--accent)"/><text x="40.4" y="177" text-anchor="middle" class="ax">1</text><rect x="58.8" y="150.5" width="20.7" height="13.5" rx="2" fill="var(--accent)"/><text x="69.2" y="177" text-anchor="middle" class="ax">2</text><rect x="87.6" y="149.7" width="20.7" height="14.3" rx="2" fill="var(--accent)"/><text x="98.0" y="177" text-anchor="middle" class="ax">3</text><rect x="116.4" y="148.9" width="20.7" height="15.1" rx="2" fill="var(--accent)"/><text x="126.8" y="177" text-anchor="middle" class="ax">4</text><rect x="145.2" y="148.8" width="20.7" height="15.2" rx="2" fill="var(--accent)"/><text x="155.6" y="177" text-anchor="middle" class="ax">5</text><rect x="174.0" y="148.8" width="20.7" height="15.2" rx="2" fill="var(--accent)"/><text x="184.4" y="177" text-anchor="middle" class="ax">6</text><rect x="202.8" y="147.5" width="20.7" height="16.5" rx="2" fill="var(--accent)"/><text x="213.2" y="177" text-anchor="middle" class="ax">7</text><rect x="231.6" y="147.2" width="20.7" height="16.8" rx="2" fill="var(--accent)"/><text x="242.0" y="177" text-anchor="middle" class="ax">8</text><rect x="260.4" y="144.9" width="20.7" height="19.1" rx="2" fill="var(--accent)"/><text x="270.8" y="177" text-anchor="middle" class="ax">9</text><rect x="289.2" y="140.3" width="20.7" height="23.7" rx="2" fill="var(--accent)"/><text x="299.6" y="177" text-anchor="middle" class="ax">10</text><line x1="26" y1="164" x2="314" y2="164" class="axl"/></svg>
+      <div class="cap">fee climbs 500 → 2179 pips across deciles</div>
+    </figure>
+    <figure>
+      <figcaption><span class="dot null"></span>Same moves, shuffled</figcaption>
+      <svg viewBox="0 0 340 190" role="img" aria-label="column chart"><rect x="30.0" y="147.7" width="20.7" height="16.3" rx="2" fill="var(--muted-bar)"/><text x="40.4" y="177" text-anchor="middle" class="ax">1</text><rect x="58.8" y="147.7" width="20.7" height="16.3" rx="2" fill="var(--muted-bar)"/><text x="69.2" y="177" text-anchor="middle" class="ax">2</text><rect x="87.6" y="148.2" width="20.7" height="15.8" rx="2" fill="var(--muted-bar)"/><text x="98.0" y="177" text-anchor="middle" class="ax">3</text><rect x="116.4" y="147.9" width="20.7" height="16.1" rx="2" fill="var(--muted-bar)"/><text x="126.8" y="177" text-anchor="middle" class="ax">4</text><rect x="145.2" y="148.2" width="20.7" height="15.8" rx="2" fill="var(--muted-bar)"/><text x="155.6" y="177" text-anchor="middle" class="ax">5</text><rect x="174.0" y="147.9" width="20.7" height="16.1" rx="2" fill="var(--muted-bar)"/><text x="184.4" y="177" text-anchor="middle" class="ax">6</text><rect x="202.8" y="147.7" width="20.7" height="16.3" rx="2" fill="var(--muted-bar)"/><text x="213.2" y="177" text-anchor="middle" class="ax">7</text><rect x="231.6" y="147.7" width="20.7" height="16.3" rx="2" fill="var(--muted-bar)"/><text x="242.0" y="177" text-anchor="middle" class="ax">8</text><rect x="260.4" y="147.9" width="20.7" height="16.1" rx="2" fill="var(--muted-bar)"/><text x="270.8" y="177" text-anchor="middle" class="ax">9</text><rect x="289.2" y="147.5" width="20.7" height="16.5" rx="2" fill="var(--muted-bar)"/><text x="299.6" y="177" text-anchor="middle" class="ax">10</text><line x1="26" y1="164" x2="314" y2="164" class="axl"/></svg>
+      <div class="cap">identical distribution, order destroyed</div>
+    </figure>
+  </div>
+  <div class="verdict">
+    <div><b>1.91&times;</b><span>top vs bottom decile</span></div>
+    <div class="vs">vs</div>
+    <div><b class="dim">1.01&times;</b><span>shuffled null</span></div>
+    <div class="rho">Spearman &rho; <b>0.1005</b>
+      &nbsp;/&nbsp; null <b class="dim">0.0148</b></div>
+  </div>
+</div>
+<div class="panel" data-pool="3" hidden>
+  <div class="charts">
+    <figure>
+      <figcaption><span class="dot real"></span>Real Unichain order</figcaption>
+      <svg viewBox="0 0 340 190" role="img" aria-label="column chart"><rect x="30.0" y="131.4" width="20.7" height="32.6" rx="2" fill="var(--accent)"/><text x="40.4" y="177" text-anchor="middle" class="ax">1</text><rect x="58.8" y="130.6" width="20.7" height="33.4" rx="2" fill="var(--accent)"/><text x="69.2" y="177" text-anchor="middle" class="ax">2</text><rect x="87.6" y="133.0" width="20.7" height="31.0" rx="2" fill="var(--accent)"/><text x="98.0" y="177" text-anchor="middle" class="ax">3</text><rect x="116.4" y="131.2" width="20.7" height="32.8" rx="2" fill="var(--accent)"/><text x="126.8" y="177" text-anchor="middle" class="ax">4</text><rect x="145.2" y="131.7" width="20.7" height="32.3" rx="2" fill="var(--accent)"/><text x="155.6" y="177" text-anchor="middle" class="ax">5</text><rect x="174.0" y="130.9" width="20.7" height="33.1" rx="2" fill="var(--accent)"/><text x="184.4" y="177" text-anchor="middle" class="ax">6</text><rect x="202.8" y="129.2" width="20.7" height="34.8" rx="2" fill="var(--accent)"/><text x="213.2" y="177" text-anchor="middle" class="ax">7</text><rect x="231.6" y="130.0" width="20.7" height="34.0" rx="2" fill="var(--accent)"/><text x="242.0" y="177" text-anchor="middle" class="ax">8</text><rect x="260.4" y="124.6" width="20.7" height="39.4" rx="2" fill="var(--accent)"/><text x="270.8" y="177" text-anchor="middle" class="ax">9</text><rect x="289.2" y="120.1" width="20.7" height="43.9" rx="2" fill="var(--accent)"/><text x="299.6" y="177" text-anchor="middle" class="ax">10</text><line x1="26" y1="164" x2="314" y2="164" class="axl"/></svg>
+      <div class="cap">fee climbs 500 → 2149 pips across deciles</div>
+    </figure>
+    <figure>
+      <figcaption><span class="dot null"></span>Same moves, shuffled</figcaption>
+      <svg viewBox="0 0 340 190" role="img" aria-label="column chart"><rect x="30.0" y="129.0" width="20.7" height="35.0" rx="2" fill="var(--muted-bar)"/><text x="40.4" y="177" text-anchor="middle" class="ax">1</text><rect x="58.8" y="129.4" width="20.7" height="34.6" rx="2" fill="var(--muted-bar)"/><text x="69.2" y="177" text-anchor="middle" class="ax">2</text><rect x="87.6" y="130.3" width="20.7" height="33.7" rx="2" fill="var(--muted-bar)"/><text x="98.0" y="177" text-anchor="middle" class="ax">3</text><rect x="116.4" y="129.0" width="20.7" height="35.0" rx="2" fill="var(--muted-bar)"/><text x="126.8" y="177" text-anchor="middle" class="ax">4</text><rect x="145.2" y="130.0" width="20.7" height="34.0" rx="2" fill="var(--muted-bar)"/><text x="155.6" y="177" text-anchor="middle" class="ax">5</text><rect x="174.0" y="129.4" width="20.7" height="34.6" rx="2" fill="var(--muted-bar)"/><text x="184.4" y="177" text-anchor="middle" class="ax">6</text><rect x="202.8" y="130.0" width="20.7" height="34.0" rx="2" fill="var(--muted-bar)"/><text x="213.2" y="177" text-anchor="middle" class="ax">7</text><rect x="231.6" y="127.9" width="20.7" height="36.1" rx="2" fill="var(--muted-bar)"/><text x="242.0" y="177" text-anchor="middle" class="ax">8</text><rect x="260.4" y="128.1" width="20.7" height="35.9" rx="2" fill="var(--muted-bar)"/><text x="270.8" y="177" text-anchor="middle" class="ax">9</text><rect x="289.2" y="129.4" width="20.7" height="34.6" rx="2" fill="var(--muted-bar)"/><text x="299.6" y="177" text-anchor="middle" class="ax">10</text><line x1="26" y1="164" x2="314" y2="164" class="axl"/></svg>
+      <div class="cap">identical distribution, order destroyed</div>
+    </figure>
+  </div>
+  <div class="verdict">
+    <div><b>1.35&times;</b><span>top vs bottom decile</span></div>
+    <div class="vs">vs</div>
+    <div><b class="dim">0.99&times;</b><span>shuffled null</span></div>
+    <div class="rho">Spearman &rho; <b>0.2353</b>
+      &nbsp;/&nbsp; null <b class="dim">0.0662</b></div>
+  </div>
+</div>
+<div class="panel" data-pool="4" hidden>
+  <div class="charts">
+    <figure>
+      <figcaption><span class="dot real"></span>Real Unichain order</figcaption>
+      <svg viewBox="0 0 340 190" role="img" aria-label="column chart"><rect x="30.0" y="155.1" width="20.7" height="8.9" rx="2" fill="var(--accent)"/><text x="40.4" y="177" text-anchor="middle" class="ax">1</text><rect x="58.8" y="154.4" width="20.7" height="9.6" rx="2" fill="var(--accent)"/><text x="69.2" y="177" text-anchor="middle" class="ax">2</text><rect x="87.6" y="153.7" width="20.7" height="10.3" rx="2" fill="var(--accent)"/><text x="98.0" y="177" text-anchor="middle" class="ax">3</text><rect x="116.4" y="153.8" width="20.7" height="10.2" rx="2" fill="var(--accent)"/><text x="126.8" y="177" text-anchor="middle" class="ax">4</text><rect x="145.2" y="153.3" width="20.7" height="10.7" rx="2" fill="var(--accent)"/><text x="155.6" y="177" text-anchor="middle" class="ax">5</text><rect x="174.0" y="152.4" width="20.7" height="11.6" rx="2" fill="var(--accent)"/><text x="184.4" y="177" text-anchor="middle" class="ax">6</text><rect x="202.8" y="152.1" width="20.7" height="11.9" rx="2" fill="var(--accent)"/><text x="213.2" y="177" text-anchor="middle" class="ax">7</text><rect x="231.6" y="151.6" width="20.7" height="12.4" rx="2" fill="var(--accent)"/><text x="242.0" y="177" text-anchor="middle" class="ax">8</text><rect x="260.4" y="150.2" width="20.7" height="13.8" rx="2" fill="var(--accent)"/><text x="270.8" y="177" text-anchor="middle" class="ax">9</text><rect x="289.2" y="147.2" width="20.7" height="16.8" rx="2" fill="var(--accent)"/><text x="299.6" y="177" text-anchor="middle" class="ax">10</text><line x1="26" y1="164" x2="314" y2="164" class="axl"/></svg>
+      <div class="cap">fee climbs 500 → 1041 pips across deciles</div>
+    </figure>
+    <figure>
+      <figcaption><span class="dot null"></span>Same moves, shuffled</figcaption>
+      <svg viewBox="0 0 340 190" role="img" aria-label="column chart"><rect x="30.0" y="153.0" width="20.7" height="11.0" rx="2" fill="var(--muted-bar)"/><text x="40.4" y="177" text-anchor="middle" class="ax">1</text><rect x="58.8" y="152.6" width="20.7" height="11.4" rx="2" fill="var(--muted-bar)"/><text x="69.2" y="177" text-anchor="middle" class="ax">2</text><rect x="87.6" y="152.6" width="20.7" height="11.4" rx="2" fill="var(--muted-bar)"/><text x="98.0" y="177" text-anchor="middle" class="ax">3</text><rect x="116.4" y="152.1" width="20.7" height="11.9" rx="2" fill="var(--muted-bar)"/><text x="126.8" y="177" text-anchor="middle" class="ax">4</text><rect x="145.2" y="152.4" width="20.7" height="11.6" rx="2" fill="var(--muted-bar)"/><text x="155.6" y="177" text-anchor="middle" class="ax">5</text><rect x="174.0" y="152.9" width="20.7" height="11.1" rx="2" fill="var(--muted-bar)"/><text x="184.4" y="177" text-anchor="middle" class="ax">6</text><rect x="202.8" y="152.4" width="20.7" height="11.6" rx="2" fill="var(--muted-bar)"/><text x="213.2" y="177" text-anchor="middle" class="ax">7</text><rect x="231.6" y="151.8" width="20.7" height="12.2" rx="2" fill="var(--muted-bar)"/><text x="242.0" y="177" text-anchor="middle" class="ax">8</text><rect x="260.4" y="152.7" width="20.7" height="11.3" rx="2" fill="var(--muted-bar)"/><text x="270.8" y="177" text-anchor="middle" class="ax">9</text><rect x="289.2" y="151.6" width="20.7" height="12.4" rx="2" fill="var(--muted-bar)"/><text x="299.6" y="177" text-anchor="middle" class="ax">10</text><line x1="26" y1="164" x2="314" y2="164" class="axl"/></svg>
+      <div class="cap">identical distribution, order destroyed</div>
+    </figure>
+  </div>
+  <div class="verdict">
+    <div><b>1.88&times;</b><span>top vs bottom decile</span></div>
+    <div class="vs">vs</div>
+    <div><b class="dim">1.13&times;</b><span>shuffled null</span></div>
+    <div class="rho">Spearman &rho; <b>0.1217</b>
+      &nbsp;/&nbsp; null <b class="dim">0.033</b></div>
+  </div>
+</div>
+  <p style="margin-top:20px"><b>The control.</b> Shuffle each pool's real
+  <code>(tick move, block gap)</code> observations into a random order. Same multiset, same heavy
+  tail, same median, same maximum — only the <em>clustering</em> is destroyed. Every pool:
+  real <b class="hi">1.35–6.52&times;</b>, shuffled
+  <b>0.99–1.13&times;</b>.</p>
+</section>
+
+<section>
+  <h2>The part most submissions skip</h2>
+  <h3>We ran the control on our own headline metrics. They failed.</h3>
+  <p>Before this, our README led on two numbers. Both are reproduced by shuffled noise — one pool's
+  null scores <em>better</em> than the real data. Neither can tell a working fee from a random one,
+  so we cut them from the pitch.</p>
+  <table>
+    <tr><th>Metric we used to lead with</th><th>Real</th><th>Shuffled noise</th><th>Verdict</th></tr>
+    <tr><td>Never sits at the fee floor</td><td>0.0%</td><td>0.0%</td>
+        <td class="no">Proves nothing — cut</td></tr>
+    <tr><td>Distinct fee values</td><td>315–2,093</td>
+        <td>179–3,254</td><td class="no">Null wins a pool — cut</td></tr>
+    <tr><td>Decile lift vs realised move</td><td>1.35–6.52&times;</td>
+        <td>0.99–1.13&times;</td>
+        <td class="ok">Survives — this is the claim</td></tr>
+  </table>
+  <p>Read effect sizes, not significance: at 290,640 swaps an economically worthless
+  correlation still clears any threshold.</p>
+</section>
+
+<section>
+  <h2>Why the study existed at all</h2>
+  <h3>Real data caught a bug that a green test suite hid.</h3>
+  <p>Integer truncation in <code>(dTick²)/dt</code> rounded
+  <b>44.9%</b> of real observations to <b>zero</b>. The "dynamic"
+  fee sat at its floor on <b>49.9%</b> of swaps and took just
+  <b>21–49</b> distinct values. It was a static fee wearing a dynamic fee's
+  clothes — and every unit test passed, because they used synthetic swaps large enough to hide it.</p>
+  <table>
+    <tr><th></th><th>Before</th><th>After</th></tr>
+    <tr><td>Observations truncated to zero</td><td class="no">44.9%</td>
+        <td class="ok">10.8%</td></tr>
+    <tr><td>Swaps priced at the fee floor</td><td class="no">49.9%</td>
+        <td class="ok">0.0%</td></tr>
+    <tr><td>Distinct fee values</td><td class="no">21–49</td>
+        <td class="ok">440–2,412</td></tr>
+  </table>
+  <p>Real Unichain flow is small and fast — median move <b>1 tick</b>,
+  median gap <b>2 blocks</b>, <b>19.4%</b>
+  of consecutive swaps share a block. Synthetic tests never went near that regime.</p>
+</section>
+
+<section>
+  <h2>Engineering</h2>
+  <div class="grid2">
+    <div class="card"><h4>Cannot move funds</h4><p>Both callbacks return zero deltas and all four
+      <code>*_RETURNS_DELTA</code> address bits are clear, so v4 never parses a delta from it.
+      No owner, pause, upgrade or setter — every parameter is immutable.</p></div>
+    <div class="card"><h4>Deployed and verified</h4><p class="addr">0x609634584d5BD12Ba4216116528e364d385Ad0C0</p>
+      <p>Unichain Sepolia. Runtime bytecode matched against a local deploy-profile build — the only
+      differences are the immutable slots, each confirmed through its getter.</p></div>
+    <div class="card"><h4>61 tests, both profiles</h4><p>Eight security findings fixed, each pinned
+      by a regression test written while it still failed. One remains open and is documented
+      rather than quietly dropped.</p></div>
+    <div class="card"><h4>Costs 0.0046¢ a swap</h4>
+      <p>12,221 gas, 17% of an unhooked swap. A swap
+      clears breakeven above roughly $0.81;
+      98.1%+ of real swaps do.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>What we are not claiming</h2>
+  <ol>
+    <li><b>The LP benefit is unvalidated.</b> We measure fee revenue, not LP PnL, and there is no
+      demand-elasticity model for flow that leaves at a higher fee.</li>
+    <li><b>This is a heuristic.</b> Motivated by the loss-versus-rebalancing literature — not an
+      implementation of any optimal policy from it. The word <em>optimal</em> is not used.</li>
+    <li><b>The lift is a correlation.</b> It shows the fee is charged at the right <em>times</em>,
+      not that the revenue exceeds the adverse selection it offsets.</li>
+    <li><b>One open finding.</b> A same-block round trip can strand the tick anchor. It cannot move
+      funds and costs the griefer more than the target, but a production deployment must fix it.</li>
+    <li><b>Scope.</b> Five busiest pools, one chain, one 7-day window. The thin-pool regime is
+      untested.</li>
+  </ol>
+  <p style="margin-top:18px">Every number on this page is generated from committed JSON by
+  <code>analysis/make_demo_page.py</code>. <code>analysis/run.sh</code> rebuilds all of it from
+  the chain.</p>
+</section>
+
+</div>
+<script>
+document.querySelectorAll('.tab').forEach(function(t){
+  t.addEventListener('click', function(){
+    var i = t.dataset.t;
+    document.querySelectorAll('.tab').forEach(function(x){ x.classList.toggle('on', x === t); });
+    document.querySelectorAll('.panel').forEach(function(p){ p.hidden = p.dataset.pool !== i; });
+  });
+});
+</script>

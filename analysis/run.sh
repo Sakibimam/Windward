@@ -44,6 +44,10 @@ python3 analysis/economics.py
 python3 analysis/economics.py --json
 
 echo
+echo "==> rebuilding the demo page from the committed data"
+python3 analysis/make_demo_page.py
+
+echo
 echo "Done. Machine-readable results: data/stats.json, data/economics.json"
 echo "Gas figures come from data/gas_overhead.json (written by test/WindwardGas.t.sol)"
 echo "and data/gas_economics.json (python3 analysis/gas_economics.py)."
