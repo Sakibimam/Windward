@@ -15,9 +15,12 @@ foundry.lock
 keystore/
 secrets/
 
-# Claude Code machine-local settings (RPC URLs, paths)
-.claude/settings.local.json
+# Local working notes and tooling config — not part of the published project
+.claude/
+CLAUDE.md
 CLAUDE.local.md
+CURRENT_STATE.md
+TESTING.md
 
 # Python
 __pycache__/
@@ -33,3 +36,4 @@ package-lock.json
 # Analysis raw chunk cache (regenerate with analysis/fetch.py)
 data/raw/
 data/unichain-dataset.json
+docs/RECON-guard-hook.md

@@ -1,4 +1,4 @@
-# Keel — Foundry configuration
+# Windward — Foundry configuration
 # Compiler settings mirror Uniswap v4-core / v4-periphery (solc 0.8.26, cancun) because
 # our contracts are compiled against their pinned sources. See docs/RECON.md for pin evidence.
 
@@ -31,14 +31,14 @@ fs_permissions = [
 
 [profile.default.fuzz]
 runs = 1000
-seed = '0x4b65656c'              # "Keel" — deterministic fuzzing for reproducible evidence
+seed = '0x4b65656c'              # fixed so published fuzz evidence stays reproducible
 
 [profile.default.invariant]
 runs = 256
 depth = 128
 fail_on_revert = false
 
-# Heavier fuzzing for adversarial passes (Phase 7).
+# Heavier fuzzing for adversarial passes.
 [profile.deep.fuzz]
 runs = 100000
 

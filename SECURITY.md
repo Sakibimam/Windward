@@ -88,8 +88,9 @@ Stated here because they are security-relevant, not merely economic.
 
 ## 7. Review status
 
-Three independent reviews were run on 2026-08-28 (`security-reviewer`, `protocol-reviewer`,
-`adversarial-reviewer`). Findings and their resolutions are in `DECISIONS.md` D-0018, and each
+Three independent reviews were run on 2026-08-28, covering security, Uniswap v4 protocol
+correctness, and an adversarial pass whose brief was to argue the design should be abandoned.
+A second round followed on 2026-08-29. Findings and their resolutions are in `DECISIONS.md`, and each
 repair is pinned by a regression test in `test/WindwardAttack.t.sol`.
 
 Closed and proven: **F-1** (permission bits unenforced), **W-01** (dust-swap fee suppression),

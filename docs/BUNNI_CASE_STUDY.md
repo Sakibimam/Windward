@@ -1,4 +1,4 @@
-# docs/BUNNI_CASE_STUDY.md — Phase 3
+# docs/BUNNI_CASE_STUDY.md — a real v4 hook accounting bug
 
 Researched 2026-08-28 from primary sources: the Bunni v2 source on GitHub, on-chain transaction
 identifiers, and independent third-party post-mortems.
@@ -9,7 +9,7 @@ identifiers, and independent third-party post-mortems.
 > is more nuanced than "yes".
 
 **Reproduction status: `NOT REPRODUCED`.** No fork replay has been attempted at the time of
-writing. Phase 8 will attempt one and must label the result `EXACT REPLAY`,
+writing. Any later attempt must label the result `EXACT REPLAY`,
 `FAITHFUL RECONSTRUCTION`, or `NOT REPRODUCED`. Nothing here may be described as a replay.
 
 ---
@@ -33,7 +33,7 @@ writing. Phase 8 will attempt one and must label the result `EXACT REPLAY`,
 
 `FACT` The brief said "audited by two reputable firms". It was **three**. Corrected here.
 
-`FACT` The vulnerable line is **still present on `main`** as of this session. The last functional
+`FACT` The vulnerable line was **still present on `main`** when this was written. The last functional
 commit to `src/lib/BunniHubLogic.sol` was `4c017494c4` (2025-06-01), three months *before* the
 exploit; the only later commit is `2b303b8c1b` (2025-10-23) "update license to MIT, update
 readme". **There is no fix commit** — the protocol shut down instead. So there is no corrected
@@ -64,7 +64,7 @@ All fetched 2026-08-28.
   (`src/base/BaseHook.sol`), declaring only those two callbacks. Independent corroboration of
   `docs/RECON-hooks.md` §9: there is no canonical `BaseHook` to inherit.
 - `FACT` Bunni's `BaseHook` imports `IPoolManager.SwapParams` — the pre-`PoolOperation.sol`
-  spelling. It was built against an older v4 than our pins, corroborating `docs/RECON.md` §6.2.
+  spelling. It was built against an older v4 than our pins, corroborating `docs/RECON.md` §5.2.
 
 `FACT` **The exploited function, `BunniHubLogic.withdraw()`, is not a Uniswap v4 hook callback.**
 It is an ordinary external function on a separate contract.
@@ -75,7 +75,7 @@ no liquidity callbacks to hook, and the share burn happens in a contract the Poo
 calls. Keel must be a cooperative library invoked inside the protocol's own `withdraw()`. This
 closes `docs/RECON-hooks.md` question **H1**.
 
-`INFERENCE` It also **invalidates part of the Phase 1 optimism.** `docs/RECON-hooks.md` §7
+`INFERENCE` It also **invalidates part of the optimism in `docs/RECON-hooks.md`.** Its §7
 celebrated `StateLibrary.getPositionLiquidity` as a non-forgeable source of truth. For this hook
 class it is **useless** — there is no position. The assets are ERC-20 balances held by the Hub
 plus shares in external yield vaults. Only two of the three "non-forgeable sources" survive, and
@@ -159,12 +159,12 @@ reduction**.
 reported constants and no fitting. That is good corroboration that §3 identifies the right
 mechanism. It is **not** a reproduction: the real dynamics involve the LDF recomputing the
 distribution between withdrawals, and the active balance changing each iteration. Treated as a
-consistency check only. Phase 8 owns any actual reproduction.
+consistency check only. No actual reproduction was performed.
 
 `INFERENCE` The profit came from **step 5**, not from over-withdrawal in step 3. Steps 2–3
 corrupted the accounting; step 4–5 monetised it. A guard therefore has to fire during **step 3**,
 on the withdrawal path — by step 4 the state is already invalid and the swap itself is legitimate
-given that state. This is important for Phase 6: watching swaps would be too late.
+given that state. This matters for any such guard: watching swaps would be too late.
 
 ## 5. The ten questions
 
@@ -213,7 +213,7 @@ qualification would be dishonest.**
 safe". It can at most be "declare what backs your shares, including each component, and this
 enforces monotonicity on every path". The value moves from *detection* toward *forcing the author
 to state the decomposition* — which is arguably where the bug actually was, since the developers
-never wrote down what `active` was supposed to satisfy. **Phase 4 must decide whether that
+never wrote down what `active` was supposed to satisfy. **The kill gate must decide whether that
 residual value justifies the project.** It is a materially weaker claim than the brief assumed.
 
 **8. Is the property generic across a defined hook class?**
@@ -224,7 +224,7 @@ decomposition* is not generic — it must be supplied per protocol.
 `INFERENCE` Yes, cheaply, **if** the protocol exposes its components: snapshot `(componentᵢ, S)`
 before, compare after, require `Aᵢ'·S ≥ Aᵢ·S'` (cross-multiplied, no division). No price oracle
 and no external call needed if components are token balances. Vault-backed components require an
-external call, which is a reentrancy and manipulation surface. Phase 4 must resolve this.
+external call, which is a reentrancy and manipulation surface. The kill gate must resolve this.
 
 **10. Could checking it create false positives?**
 `INFERENCE` **Yes, and this is the primary risk.** Known legitimate cases where per-share backing
@@ -233,7 +233,7 @@ value between components; a rebasing token contracting; the first depositor; and
 *component* invariant — any deliberate rebalance between active and idle, **which for Bunni is the
 LDF's entire purpose.** That last one is severe: Bunni's rebalancer legitimately moves value
 between active and idle on every swap. A naive component-monotonicity check would fire constantly.
-Phase 4 must separate "withdrawal path" from "rebalance path", or the guard is unusable.
+Any such guard must separate "withdrawal path" from "rebalance path", or it is unusable.
 
 ## 6. What Keel must NOT conclude from this
 
@@ -242,7 +242,7 @@ Phase 4 must separate "withdrawal path" from "rebalance path", or the guard is u
 - Do not assume assets are v4 position liquidity. For this class they are **not**.
 - Do not claim the textbook ERC-4626 invariant would have prevented this. **It would not have.**
 
-## 7. Carried into Phase 4
+## 7. Carried into the kill gate
 
 | # | Question |
 |---|---|

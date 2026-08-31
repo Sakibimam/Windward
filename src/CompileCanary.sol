@@ -13,7 +13,7 @@ import {SafeCallback} from "@uniswap/v4-periphery/src/base/SafeCallback.sol";
 /// @notice Phase 0 build canary. Its only job is to prove that the pinned v4-core and
 /// v4-periphery commits recorded in docs/RECON.md compile together against our solc
 /// settings. It has no protocol behaviour and MUST NOT be deployed.
-/// Delete this file once real contracts exercise the same imports (tracked in CURRENT_STATE.md).
+/// Delete this file once real contracts exercise the same imports.
 contract CompileCanary {
     using StateLibrary for IPoolManager;
 

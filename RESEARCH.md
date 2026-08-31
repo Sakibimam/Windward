@@ -1,21 +1,21 @@
-# RESEARCH.md — Keel
+# RESEARCH.md — Windward
 
 Every substantive claim in this file carries a tag. **Never silently promote a tag.**
 
 | Tag | Meaning |
 |---|---|
-| `FACT` | Verified this session from source on disk, a live query, or official documentation. Source and date recorded. |
+| `FACT` | Verified from source on disk, a live query, or official documentation. Source and date recorded. |
 | `INFERENCE` | Reasoned from verified evidence. The reasoning is stated so it can be attacked. |
 | `HYPOTHESIS` | Currently being tested. Not yet evidence for anything. |
 | `UNVERIFIED` | Not checked. **May not be relied on.** Never write a value here that was guessed. |
 
-Research phases 1–4 append to this file. Phase 0 established only what is below.
+Later research appends to this file.
 
 ---
 
 ## 1. Motivating case study — the Bunni exploit
 
-**Phase 3 complete.** Full analysis with primary sources: **`docs/BUNNI_CASE_STUDY.md`**.
+Full analysis with primary sources: **`docs/BUNNI_CASE_STUDY.md`**.
 Everything previously tagged `UNVERIFIED` here has been sourced or corrected:
 
 - `FACT` 2 September 2025; ~$8.4M (~$2.4M Ethereum, ~$5.9-6.0M Unichain).
@@ -28,7 +28,7 @@ Everything previously tagged `UNVERIFIED` here has been sourced or corrected:
   `afterInitialize` and `beforeSwap`, and Bunni holds **no v4 LP positions at all**
   (`modifyLiquidity` appears 0 times in `BunniHubLogic.sol`).
 
-**Two findings that cut against the thesis and must be confronted at the Phase 4 gate:**
+**Two findings that cut against the thesis and had to be confronted at the kill gate:**
 
 1. `INFERENCE` **The textbook ERC-4626 invariant would NOT have caught Bunni.** Total assets per
    share *increased* through the attack. What collapsed was the *active* component of a
@@ -43,12 +43,12 @@ Everything previously tagged `UNVERIFIED` here has been sourced or corrected:
 naive version is useless and the useful version needs author-supplied structure. Not a kill on
 its own; a material weakening. See `docs/BUNNI_CASE_STUDY.md` §5 Q7.
 
-## 2. Prior art — Phase 2 COMPLETE. Outcome: **redundant**.
+## 2. Prior art — COMPLETE. Outcome: **redundant**.
 
-Full review by `research-reviewer`, 2026-08-28. Its three load-bearing claims were then
-**independently re-verified** by the main session against primary sources.
+A dedicated prior-art review was run on 2026-08-28. Its three load-bearing claims were then
+**independently re-verified** against primary sources rather than taken on trust.
 
-### Verified by direct source reading (not taken on the agent's word)
+### Verified by direct source reading (not taken on the review's word)
 
 - `FACT` **OpenZeppelin `uniswap-hooks` v1.2.1 ships `src/base/BaseCustomAccounting.sol`** —
   natspec: *"Base implementation for custom accounting and hook-owned liquidity."* This is
@@ -58,7 +58,7 @@ Full review by `research-reviewer`, 2026-08-28. Its three load-bearing claims we
   `TooMuchSlippage`, `AlreadyInitialized`, and `LiquidityOnlyViaHook`.
 - `FACT` **The repo contains no `test/invariant/` directory at all** (full recursive git-tree
   read at `acbd604c…`, `truncated: false`; 54 `.sol` files). Zero invariant tests for anything.
-  *(The agent reported an invariant suite covering `LimitOrderHook`; that is wrong — there is
+  *(The review reported an invariant suite covering `LimitOrderHook`; that is wrong — there is
   none. Corrected here.)*
 - `FACT` `BaseCustomAccounting.sol:329-349` **reverts `LiquidityOnlyViaHook()`** when liquidity
   is added or removed via the `PoolManager`. It *forces* all liquidity through the hook, so the
@@ -116,23 +116,23 @@ Echidna/Medusa property. The genuinely hard part (Q4) is not made easier by pack
 
 ## 3. Uniswap v4 protocol facts
 
-`FACT` All v4 API facts verified so far live in `docs/RECON.md` §6, each with file path and line
+`FACT` All v4 API facts verified so far live in `docs/RECON.md` §5, each with file path and line
 number at the pinned commit. They are not duplicated here.
 
 Highlights that shape the design:
 
 - `FACT` Hook permission flags occupy the low 14 bits of the hook address
-  (`Hooks.ALL_HOOK_MASK = (1 << 14) - 1`). `docs/RECON.md` §6.1.
+  (`Hooks.ALL_HOOK_MASK = (1 << 14) - 1`). `docs/RECON.md` §5.1.
 - `INFERENCE` Keel's observe-and-revert-only property is enforceable as a property of the
   deployed **address**: the four `*_RETURNS_DELTA_FLAG` bits (bits 0–3) must be clear. This is
-  testable, not just documented. Phase 6 must assert it.
+  testable, not just documented. The test suite asserts it.
 - `FACT` Swap parameters are a type named `SwapParams` from
   `@uniswap/v4-core/src/types/PoolOperation.sol` at our pins — **not** `IPoolManager.SwapParams`.
   Older code and training data get this wrong.
 - `FACT` `BaseHook.sol` does **not** exist in v4-periphery at our pin. Any import from
   `v4-periphery/src/utils/BaseHook.sol` is wrong here. See `DECISIONS.md` D-0005.
 - `UNVERIFIED` Exact return tuples of `beforeSwap` / `afterSwap` / liquidity callbacks, and the
-  fee-override encoding. **Phase 1** work. Do not write hook code before it is done.
+  fee-override encoding. Recorded in `docs/RECON-hooks.md`. Do not write hook code before it is done.
 
 ---
 
@@ -147,4 +147,4 @@ Highlights that shape the design:
 | Q5 | How do fees, donations, rebasing tokens, fee-on-transfer tokens, external yield, and custom curves each perturb the claims↔assets relationship? | 4 | open |
 | Q6 | Can false positives be driven near zero? A guard that freezes withdrawals is worse than the bug it prevents. | 4, 7 | open |
 | Q7 | Who is `0x2BAD8182C09F50c8318d769245beA52C32Be46CD` (the Unichain PoolManager owner)? Matters for the threat model. | 1 | `UNVERIFIED` |
-| Q8 | Is `https://mainnet.unichain.org` usable for a full fork test suite, and is Ethereum archive access needed for Phase 8? | 8 | partly open — see `docs/RECON.md` §3.3 |
+| Q8 | Is `https://mainnet.unichain.org` usable for a full fork test suite, and is Ethereum archive access needed for a fork reproduction? | 8 | partly open — see `docs/RECON.md` §2 |

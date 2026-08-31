@@ -1,241 +1,134 @@
 # Windward
 
-**A naive volatility-scaled fee sat at its floor on 49.9% of real Unichain swaps (swap-weighted)
-and took only 21–49 distinct values. Repaired, it never reaches the floor and takes 437–2,349
-distinct values per pool. That was found by replaying the estimator over 290,640 real swaps —
-not by a unit test, which had shown it working.**
+**A Uniswap v4 hook that raises the swap fee when the pool is moving and lowers it when the pool
+is calm, using nothing but the pool's own recent price history.**
 
-A volatility-adaptive fee **heuristic** for Uniswap v4, computed from the pool's own tick
-history. Motivated by the loss-versus-rebalancing literature; **not** an implementation of any
-optimal policy from it, and **not** validated as improving LP outcomes.
+UHI10 Hookathon · *The Fair Flow Frontier*
 
-The primary artifact is the **measurement study**; the hook is the instrument that produced it
-(`DECISIONS.md` D-0018).
+Live on Unichain Sepolia: **`0x609634584d5BD12Ba4216116528e364d385Ad0C0`** — runtime bytecode
+verified against source (`docs/DEPLOYMENT.md`).
 
-UHI10 Hookathon · *The Fair Flow Frontier: MEV protection and sustainable low-fee liquidity*
+## What it does
 
----
+A static fee tier is wrong most of the time: too high when nothing is happening, too low exactly
+when prices are moving — which is when informed order flow is most expensive for liquidity
+providers. Windward prices that difference per swap.
 
-## The surviving finding
+**How.** After each swap the hook reads the new tick straight from the `PoolManager` and folds
+the squared tick move, divided by elapsed time, into a time-decayed variance estimate. Before the
+next swap it takes the square root, scales it, adds a floor and clamps to a ceiling, returning
+that fee to v4 with the override flag for that swap only. Observations lose weight on a
+300-second half-life, so a quiet pool drifts back to the floor on its own.
 
-Replayed over the **five busiest pools — 290,640 swaps, 68.1% of the 426,807 in the 7-day
-window**. Per pool, never "up to X" across pools:
+**What it never does.** No oracle, no external call on the swap path, no priority-fee assumption,
+and no owner, pause, upgrade or setter — every parameter is `immutable`. Both callbacks return
+zero deltas and all four `*_RETURNS_DELTA` address bits are clear, so v4 never even parses a
+delta from it. **Windward cannot move funds. It can only price them.**
 
-| pool | swaps | original: at floor | repaired: at floor | original: distinct | repaired: distinct |
-|---|---|---|---|---|---|
-| `0xc4f393…` (busiest) | 89,048 | 20.6% | **0.0%** | 49 | **2,349** |
-| `0x75b192…` | 76,313 | 73.0% | **0.0%** | 49 | **1,786** |
-| `0x3258f4…` | 71,915 | 58.7% | **0.0%** | 35 | **1,039** |
-| `0x04b7dd…` | 31,011 | 35.3% | **0.0%** | 31 | **909** |
-| `0x51f9d6…` | 22,353 | 79.5% | **0.0%** | 21 | **437** |
-| **swap-weighted** | 290,640 | **49.9%** | **0.0%** | — | — |
+## Does the fee actually track volatility?
 
-### Which repair did what
+This needs a null — otherwise "our fee varies a lot" proves nothing, since a random number
+generator varies too. So: for each pool, shuffle the order of the real `(tick move, block gap)`
+observations with a fixed seed. That preserves the multiset **exactly** — same heavy tail, same
+median, same maximum — and destroys only volatility clustering, the one thing an adaptive fee
+could exploit.
 
-Four arms over the same 290,640 swaps, isolating each change:
+**Bucket every swap by the fee charged, then measure the tick move that actually followed:**
 
-| arm | at floor | distinct values |
-|---|---|---|
-| v1 original | 20.6 – 79.5% | 21 – 49 |
-| **v2: WAD carried through the division and the sqrt — nothing else** | **0.0%** | **1,006 – 4,443** |
-| v3: + time-based decay replacing the per-observation EMA | 0.0% | 403 – 3,107 |
-| v4: + `dt == 0` identity and the cap tightened 1e12 → 1e8 (= the contract) | 0.0% | 437 – 2,349 |
+| pool | swaps | decile 1 | decile 10 | lift | null lift | ρ | null ρ |
+|---|---|---|---|---|---|---|---|
+| `0xc4f393…` | 89,048 | 1.53 | 7.31 | **4.78x** | 1.04x | 0.2501 | 0.0129 |
+| `0x75b192…` | 76,313 | 1.25 | 8.15 | **6.52x** | 1.13x | 0.1965 | 0.0135 |
+| `0x3258f4…` | 71,915 | 0.79 | 1.51 | **1.91x** | 1.01x | 0.1005 | 0.0148 |
+| `0x04b7dd…` | 31,011 | 2.08 | 2.80 | **1.35x** | 0.99x | 0.2353 | 0.0662 |
+| `0x51f9d6…` | 22,353 | 0.57 | 1.07 | **1.88x** | 1.13x | 0.1217 | 0.0330 |
 
-**The fixed-point fix alone does all of it.** v2 takes every pool from 20.6–79.5% at the floor to
-0.0%, and to 1,006–4,443 distinct values — more resolution than the shipped contract has.
+Deciles are mean realised tick move over the interval each swap opened.
 
-**The security repairs made the signal worse.** Time-based decay and the `dt == 0` identity cut
-the busiest pool from **4,443 distinct values to 2,349** — a 47% loss of resolution — and on
-`0x51f9d6…` from 1,006 to 437. **We kept them anyway.** W-01 and W-02 are exploitable: without
-time-based decay, 30 dust swaps in one block drop the fee from 10000 to 500 pips in the same
-transaction as the trade they defeat, and one ordinary swap pins a pool at 1% for a week. A
-sharper signal that a trader can switch off at will is worth less than a blunter one they cannot.
-That is a deliberate trade, not a free win.
+Across 290,640 real Unichain swaps the top fee decile precedes tick moves **1.35–6.52x** larger
+than the bottom decile, in all five pools, against a null of **0.99–1.13x**. ρ is Spearman rank
+correlation against realised forward variance — rank rather than Pearson, because tick moves are
+heavy-tailed. Read effect sizes, not significance: at this sample size an economically worthless
+correlation would still clear any threshold.
 
-Reproduce: `python3 analysis/stats.py`.
+**We ran this null on our own headline metrics first, and they failed it.** "Sits at the fee
+floor 0.0% of the time" and "takes 440–2,412 distinct values" are both reproduced by the shuffle —
+the null even wins a pool. Both were demoted to a diagnosis of the integer-truncation bug that
+real data caught and unit tests did not (`docs/ABLATION.md`).
 
-**What "0.0% at floor" actually means:** the repaired hook charges **above** its 500-pip floor on
-**every** replayed swap. That is not self-evidently good — it is a fee increase on 100% of flow,
-and it is what makes the gas breakeven below come out positive by construction. Pool
-`0x75b192…` still pins the 1% **ceiling** on 0.3% of its swaps despite W-02 being closed.
-
-**Real flow is small and fast:** median absolute tick move **1** (p90 = 3), median gap between
-consecutive swaps **2 blocks** (p90 = 23), and 19.4% of consecutive swaps share a block. Integer
-`(dTick²)/dt` truncates most of that to zero.
-
-### This is a Python model, not the contract
-
-The replay runs `analysis/volatility_model.py`, a reimplementation of `src/lib/Volatility.sol`.
-The two are pinned to a fixed 8-step vector by `test/VolatilityDifferential.t.sol` and
-`analysis/test_differential.py`, which assert the same expected values from both sides — if
-either drifts, one fails. Without that pair these numbers would describe a model of the hook
-rather than the hook.
-
-`dt` in the replay is a **block** delta; the contract uses a **second** delta. Unichain produces
-one block per second, so they coincide there — but the measured quantity is blocks.
-
-## Does it pay for its own gas?
-
-Gas overhead is **11,192 per swap**, **15%** of the harness's 71,259-gas unhooked swap. It is
-asserted to a tight range in `test/WindwardGas.t.sol` and written to `data/gas_overhead.json`,
-which `analysis/gas_economics.py` reads — it is not transcribed into any script or comment.
-It is a **local Foundry harness** measurement with synthetic swap sizes, not a mainnet figure.
-
-```
-$ cast gas-price --rpc-url https://mainnet.unichain.org
-1500000
-```
-
-ETH/USD is a **single live `sqrtPriceX96` spot read** from the pool identified as native-ETH/USDC
-by Transfer-log heuristics: **~$2,444** at the time of writing. One pool, one instant, no TWAP,
-sanity-checked only for order of magnitude — and re-read live on every run, so the cent-level
-figures below move between runs.
-
-```
-11,192 gas x 1,500,000 wei = 0.000000016788 ETH = ~$0.000041 per swap
-```
-
-**Headline is the conservative case: the p10 fee**, i.e. the fee charged on the calmest decile of
-swaps. The median-fee figure flatters the result, because a breakeven derived from the median fee
-is then compared against the *full* distribution of swap sizes.
-
-| pool | pair | median swap | p10 fee | **breakeven (p10)** | **% above** | median fee | breakeven (median) | % above |
-|---|---|---|---|---|---|---|---|---|
-| `0xc4f393…` | USDC/HYPE | $113.62 | 636 | **$0.30** | **99.8%** | 761 | $0.16 | 99.9% |
-| `0x75b192…` | USDC/SOL | $0.92 | 577 | **$0.53** | **99.0%** | 643 | $0.29 | 99.4% |
-| `0x3258f4…` | ETH/USDC | $124.59 | 557 | **$0.72** | **98.3%** | 639 | $0.29 | 99.1% |
-| `0x04b7dd…` | WETH/USD₮0 | $103.04 | 568 | **$0.60** | **99.3%** | 645 | $0.28 | 99.5% |
-
-**A swap must clear roughly $0.72 before the LP's extra fee income exceeds the extra gas the
-swapper burns. 98.3–99.8% of real swaps do.** On the optimistic median-fee basis the figure is
-$0.29 and 99.1–99.9% — the percentages barely move; the breakeven more than doubles.
-
-That is an accounting identity across two different parties, not a welfare result: the swapper
-pays both the gas and the higher fee, so a swapper is strictly worse off.
-
-Two further caveats. "vs static 500" assumes the counterfactual pool charges 500 pips; nothing in
-the dataset establishes these pools' actual fees, and 500 is the hook's own `feeMin`. And it
-assumes the same flow still arrives at a higher fee — see Limitations #1.
-
-Figures from one run of `analysis/gas_economics.py`; the live ETH spot read moves the cent-level
-values slightly between runs.
-
-## Why it reads the tick and nothing else
-
-**Chronology, stated plainly.** The **50-minute, 745-swap** study drove these four eliminations
-(`DECISIONS.md` D-0016). The **7-day** study came afterwards (D-0020) and **retracted three of
-the figures those eliminations rested on**. The eliminations still stand; the numbers below are
-the corrected ones, and where the original reason no longer holds it is marked.
-
-| Signal | 7-day measurement | Why it was eliminated |
-|---|---|---|
-| **Priority fee** | Retail via Universal Router pays 1,450,000 wei at p25–p90, with a heavy right tail (max 464M). Broad classifier (n=619): retail median is **17.4×** the arb median | The direction, not the magnitude — see below |
-| **First-of-block** | **82.7%** of swaps are the **first** swap for their pool in their block; the other 17.3% (~10,500/day) are not | Too thin a base to key a mechanism on. *Originally justified at 95.4%, now retracted to 82.7%* |
-| **JIT contention** | **19** events in 7 days across 232 pools | **OpenZeppelin ships `LiquidityPenaltyHook` (311 lines, complete)** — prior art, not rarity. The rarity argument rested on "zero JIT", now retracted |
-| **Directional toxicity** | Pool-dependent — 2 of 5 mean-revert (AC(1) −0.139, −0.133), 3 trend (+0.114 to +0.186) | No chain-wide direction |
-
-On the priority fee: the conservative classifier has **n=9**, and its distribution is a single
-constant (1.0 gwei at p25 through max), so it cannot support a magnitude — we report the
-**direction only**. Both classifiers' false-positive assumptions are in `analysis/stats.py`.
-
-Windward depends on none of these. It reads only the pool's own tick history.
+**What this does not show.** Charging at the right *times* is necessary, not sufficient. It does
+not show the revenue exceeds the adverse selection it offsets. **The LP benefit is unvalidated.**
+Reproduce: `python3 analysis/economics.py`.
 
 ## Quick start
 
 ```bash
-forge test                             # 49 tests
+forge test                             # 61 tests
 python3 analysis/test_differential.py  # model <-> contract agreement
-analysis/run.sh                        # 102s with the cache warm; a cold run refetches 541MB
-analysis/run.sh --quick                # smoke test on 20k blocks / 200 txs — NOT a reproduction
-script/demo.sh                         # 5.7s cold, fully offline
+analysis/run.sh                        # 102s warm; a cold run refetches 541MB
+analysis/run.sh --quick                # smoke test only — NOT a reproduction
+script/demo.sh                         # 6.8s cold, fully offline
 ```
+
+## Testing
+
+61 tests, green under both profiles (`forge test`, `FOUNDRY_PROFILE=deep forge test`). Fuzzing
+uses a fixed seed so evidence is reproducible: 1,000 runs by default, 100,000 under `deep`.
+
+Two standing rules: **never weaken a test to make a suite pass**, and **every finding gets a
+named regression test before it is fixed**, written while it still fails so it has proven it can
+fail. Both directions of each invariant are tested.
 
 ## Security
 
-**Windward holds and transfers no tokens.** It does set the LP fee, which is an economic lever
-over every swap — see Limitations #5.
+Six independent reviews across two rounds. **Eight findings fixed, each pinned by a regression
+test that fails if the fix is removed; one open and documented rather than quietly dropped.**
 
-- `beforeSwap` returns a zero delta; `afterSwap` returns `0`.
-- All four `*_RETURNS_DELTA` address bits are clear, so v4 **never parses** a returned delta.
-- The constructor calls `Hooks.validateHookPermissions` with the full 14-flag set.
-- No owner, no pause, no upgrade path, no setters. Every parameter is `immutable`.
+The second round found two issues the first missed, both confirmed by our own probe tests rather
+than taken on trust. **H-1** (fixed): the fee was priced from *undecayed* state, so a pool at the
+1% ceiling still quoted 1% after seven silent days. **C-1** (open, accepted): a same-block round
+trip can strand the tick anchor, so the next honest swap pays for a phantom move — it cannot move
+funds, but a production deployment must fix it.
 
-Three independent reviews (security, protocol, adversarial) ran on 2026-08-28.
+Full policy in **`SECURITY.md`**; every vector in **`THREAT_MODEL.md`**.
 
-| Finding | Was | Now | Pinned by |
-|---|---|---|---|
-| **W-01** dust-swap suppression | 30 dust swaps in one block dropped the fee 10000 → 500 pips (20×), in the same transaction as the trade it defeated | Decay by elapsed time; `dt == 0` is an identity | a test that previously passed by demonstrating the attack |
-| **W-02** ceiling pinned | One ordinary swap pinned the pool at 1%, still there seven days later | Decays on wall-clock time | same |
-| **W-03** fee ladder | 1 distinct fee value across 40 escalating swaps | 1-pip resolution | same |
-| **F-1** permission bits | Only returns-delta bits checked; a missing flag meant a permanently fee-free pool, silently | Full 14-flag validation | a constructor-rejection test |
-| **W-06** exact-output DoS | `feeMax == MAX_LP_FEE` reverts every exact-output swap in v4 | Rejected in the constructor | a constructor-rejection test |
-
-**Not audited.** Hackathon prototype. Must not secure real funds.
+**Not audited. Prototype. Must not secure real funds.**
 
 ## Limitations
 
-1. **The LP benefit is unvalidated.** We measure *fee revenue*, not LP PnL, with no
+The six that most affect how the result should be read. All ten are in `docs/LIMITATIONS.md`.
+
+1. **Windward is a HEURISTIC, and the word *optimal* does not describe it.** It is a volatility-
+   adaptive fee computed from the pool's own tick history, motivated by the loss-versus-rebalancing
+   literature — **not** an implementation of any optimal policy from it, and **not** validated as
+   improving LP outcomes (`DECISIONS.md` D-0019).
+2. **The LP benefit is unvalidated.** We measure *fee revenue*, not LP PnL, with no
    demand-elasticity model. `test_sanity_…` proves `10000 > 500` and is **not evidence**.
-2. **The replay covers the 5 busiest pools only.** **136,167 swaps across 227 pools (31.9% of
+3. **The replay covers the 5 busiest pools only.** **136,167 swaps across 227 pools (31.9% of
    the window) were never replayed** — and those are the thin, low-activity pools where the
    estimator is least tested. **The thin-pool regime is untested.**
-3. **The fee is charged to the trader after the mover.** Property of every reactive dynamic fee.
-4. **The estimator conflates transient and permanent price impact.** LVR depends on the
-   permanent component.
-5. **The tick is steerable.** A funded actor can raise a pool's fee by trading it.
-6. **`feePerSigma` has no derivation.** A free parameter, in an immutable contract.
-7. **One chain, one 7-day window, one public RPC, a 6,000-transaction sample.** Pool identities
-   come from Transfer-log heuristics, not a registry.
-
-## Retracted findings
-
-An earlier 50-minute, 745-swap sample produced four claims that **did not survive** the 7-day,
-426,807-swap window (`DECISIONS.md` D-0020):
-
-| Retracted claim | 50-min sample | 7-day sample |
-|---|---|---|
-| "Retail pays **301×** the median arbitrageur" | 301× (n=40) | **17.4×** (broad, n=619); the conservative classifier cannot support a magnitude |
-| "**Zero JIT** on Unichain" | 0 events | **19 events** |
-| "Only **3 LP addresses**" | 3 | **46** |
-| "Unichain v4 flow **mean-reverts**" — and its later retraction claiming **momentum** | one or the other | **Pool-dependent.** Both were over-generalisations |
-
-The 95.4% first-of-block figure was also overstated; it is 82.7%.
-
-### Three data errors we found in our own analysis
-
-| # | Error | Effect | Prevented now by |
-|---|---|---|---|
-| 1 | **int24 sign extension** — decoded ticks with a 24-bit convention; the ABI sign-extends across a full 32-byte word | 31% of ticks decoded as ~2²⁵⁶ | `analysis/test_decode.py` |
-| 2 | **Swap direction inverted** — `PoolManager` emits the **caller's** delta, so `amount0 > 0` is a *buy*; `IPoolManager.sol:85` says the opposite | Every direction-conditional statistic inverted | `test/SwapEventConvention.t.sol`, which pins the convention against the **protocol** |
-| 3 | **Wrong denominator** — priority-fee shares over all transactions rather than swap flow | Inverted the conclusion | Classifiers state population and FP assumptions |
-
-Root cause of all three: the analysis lived in uncommitted scratchpad scripts. `analysis/` exists
-so a judge can reproduce every number here from a fresh clone.
-
-## Candidate count
-
-Windward is the **eleventh** candidate; **ten** were eliminated, each recorded in `DECISIONS.md`:
-
-1. Tempo — flashblock-position fee (D-0001)
-2. Generic Keel — three universal invariants (D-0002)
-3. Keel — runtime accounting guard (D-0003, killed D-0013)
-4. Keel — invariant test kit (rejected D-0014, off-theme)
-5. Fathom — counterfactual fee-hook backtester (D-0014, superseded D-0015)
-6. Ballast — priority-fee MEV tax (D-0015, killed D-0016)
-7. Nezlobin directional fee · 8. first-of-block surcharge · 9. JIT protection · 10. am-AMM
-   auction hook (all D-0016)
-
-D-0016's own table says "seven successive candidates died" — that count covers rows 3, 4, 6–10
-only, excluding Tempo, generic Keel and Fathom. Windward's own *economic thesis* was then killed
-in D-0018; the code survives as a measurement instrument.
+4. **The tick is steerable.** A funded actor can raise a pool's fee by trading it.
+5. **All four hook parameters are underived deployment choices, not results.** `feeMin` (500),
+   `feeMax` (10000), `feePerSigma` (200) and `halfLife` (300s) are constructor arguments picked
+   by hand. **Nothing in the study derives, fits, or optimises any of them**, and no sensitivity
+   analysis was run.
+6. **The lift result is a correlation, not a causal or welfare claim.** It shows the fee is
+   charged at the right *times*. It does not show the revenue exceeds the adverse selection it is
+   meant to offset. See #2.
 
 ## Repository map
 
 | Path | What |
 |---|---|
-| `src/WindwardHook.sol`, `src/lib/Volatility.sol` | The hook and its estimator |
-| `analysis/` | The study. `run.sh` reproduces every number |
-| `analysis/volatility_model.py` | The Python model the replay uses |
-| `data/stats.json`, `data/gas_economics.json`, `data/gas_overhead.json` | Committed outputs |
-| `docs/WINDWARD_DESIGN.md` | Frozen design |
-| `DECISIONS.md` | Append-only log, including every retraction |
+| `src/` | The hook and its estimator |
+| `analysis/` | The study; `run.sh` reproduces every number here |
+| `data/*.json` | **Every published figure is read from these files** |
+| `docs/ABLATION.md` | The truncation bug, and which repair did what |
+| `docs/GAS.md` | Gas overhead in dollars, and the breakeven swap |
+| `docs/SIGNALS.md` | Signals measured and rejected; why we read the tick |
+| `docs/CORRECTIONS.md` | Claims this project retracted |
+| `docs/LIMITATIONS.md` | All ten limitations |
+| `docs/DEPLOYMENT.md` | Deployment evidence, read back from chain |
+| `THREAT_MODEL.md` · `SECURITY.md` · `DECISIONS.md` | Vectors · policy · append-only decision log |
+
+MIT licensed. See `LICENSE`.

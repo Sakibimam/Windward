@@ -1,4 +1,4 @@
-# docs/RECON-hooks.md — Uniswap v4 hook API evidence (Phase 1)
+# docs/RECON-hooks.md — Uniswap v4 hook API evidence
 
 Every signature, constant, and behaviour below was read from source on disk on **2026-08-28**.
 
@@ -6,7 +6,7 @@ Every signature, constant, and behaviour below was read from source on disk on *
 (v4-periphery `dce236d4e2057422d0791d9a973a58765eb46f65`). Paths are repo-relative; line numbers
 are at that commit. Nothing here came from a tutorial, a blog post, or memory.
 
-> Naming note: this file is about **Uniswap v4 hooks**. The Claude Code `PreToolUse` guard-hook
+> Naming note: this file is about **Uniswap v4 hooks**. The unrelated local shell guard-hook
 > evidence formerly at this path now lives in `docs/RECON-guard-hook.md`.
 
 ---
@@ -36,14 +36,14 @@ duration of the transaction.
 
 `INFERENCE` **This is a conservation check, not a solvency check.** It says tokens moved
 consistently; it says nothing about whether any accounting layered on top is coherent. This is
-exactly the gap `PROJECT.md` claims Keel targets, and Phase 1 confirms the gap is real: there is
+exactly the gap the guard-hook design targeted, and this sweep confirms the gap is real: there is
 no v4 mechanism that inspects a hook's own bookkeeping. **`HYPOTHESIS` remains** that a useful
-generic invariant exists to fill it — that is Phase 4's question, not settled here.
+generic invariant exists to fill it — that question is not settled here.
 
 ## 2. Hook callback signatures — complete and verified
 
 `FACT` `lib/v4-core/src/interfaces/IHooks.sol`. **Return tuples included** — these were
-`UNVERIFIED` after Phase 0 and are the most common source of stale-memory errors.
+`UNVERIFIED` beforehand and are the most common source of stale-memory errors.
 
 | Line | Signature | Returns |
 |---|---|---|
@@ -100,7 +100,7 @@ position, that owner is the hook contract itself.
 `callerDelta = principalDelta + feesAccrued` (`PoolManager.sol:171`). `feesAccrued` is passed to
 the after-liquidity callbacks separately, so a hook can distinguish fee income from principal.
 
-## 4. `noSelfCall` — the most consequential finding of Phase 1
+## 4. `noSelfCall` — the most consequential finding of this sweep
 
 `FACT` `lib/v4-core/src/libraries/Hooks.sol:170-175`
 
@@ -163,7 +163,7 @@ exact operations that mint and burn shares.** `afterRemoveLiquidity` would not f
 withdrawal. This is not a bug to work around; it is the intended design (the comment at
 `Hooks.sol:170` says so).
 
-`INFERENCE` Consequences for the architecture, to be settled in Phase 4:
+`INFERENCE` Consequences for the architecture, to be settled at the kill gate:
 
 1. Keel cannot be a **passive observer hook** on someone else's pool. There is no v4 mechanism
    by which contract A observes contract B's hook callbacks.
@@ -173,7 +173,7 @@ withdrawal. This is not a bug to work around; it is the intended design (the com
    author from their own bugs; it cannot protect users from a hook author who declines to use it,
    or who removes the call.
 
-`INFERENCE` This materially narrows the value proposition and **must be confronted in the Phase 4
+`INFERENCE` This materially narrows the value proposition and **must be confronted at the
 kill gate**, not glossed. It does not by itself kill the project — "a correctness harness the
 hook author installs" is a real product category (`SafeERC20`, `ReentrancyGuard`) — but it is a
 different and weaker claim than "a runtime safety layer for v4 hooks", and every artifact must
@@ -181,7 +181,7 @@ stop making the stronger claim. Recorded as `DECISIONS.md` D-0011.
 
 `UNVERIFIED` Whether some real vault-style hooks route user deposits through
 `PoolManager.modifyLiquidity` with the *user* as `msg.sender` (which would fire the callbacks
-normally). Phase 3 must check what Bunni actually did.
+normally). See `docs/BUNNI_CASE_STUDY.md` for what Bunni actually did.
 
 ## 5. Hook permission flags and address validity
 
@@ -280,11 +280,11 @@ hook-initiated liquidity change, and all three match — while the hook itself o
 pool position liquidity via `StateLibrary`, in-flight currency deltas via
 `TransientStateLibrary`, and raw ERC-20/6909 balances. None of these is a number the guarded
 hook merely asserts — which is precisely the property `THREAT_MODEL.md` §3 demanded. **This is
-the strongest positive result of Phase 1 for the thesis.**
+the strongest positive result of this sweep for the thesis.**
 
 `UNVERIFIED` Whether these are *sufficient* to express a backing invariant, and how liquidity in
 a tick range converts to a comparable asset quantity without invoking price (which an attacker
-may control). Phase 4.
+may control). To be settled at the kill gate.
 
 ## 8. Dynamic fees
 
@@ -294,7 +294,7 @@ may control). Phase 4.
 (`isDynamicFee` :30). `FACT` The `beforeSwap` fee return is only read for dynamic-fee pools
 (`Hooks.sol:263`).
 
-`INFERENCE` Keel does not need dynamic fees. Recorded only so that no future session wires them
+`INFERENCE` The guard-hook design does not need dynamic fees. Recorded only so that nobody wires them
 in speculatively.
 
 ## 9. `BaseHook` — confirmed absent
@@ -307,10 +307,10 @@ in speculatively.
 
 `INFERENCE` The near-universal tutorial import
 `import {BaseHook} from "v4-periphery/src/utils/BaseHook.sol"` **does not compile at our pins**.
-`DECISIONS.md` D-0005 remains open; Phase 2 assesses OpenZeppelin `uniswap-hooks` as prior art
+`DECISIONS.md` D-0005 remains open; the prior-art review assesses OpenZeppelin `uniswap-hooks`
 before it can be considered as a dependency.
 
-## 10. Unichain deployment — re-verified this session
+## 10. Unichain deployment — re-verified
 
 `FACT` Re-verified live on 2026-08-28 at block **57148459** against
 `https://mainnet.unichain.org` (`cast chain-id` → `130`):
@@ -323,7 +323,7 @@ before it can be considered as a dependency.
 | `PositionManager(0x4529…17bf).poolManager()` | `0x1F98400000000000000000000000000000000004` |
 
 `FACT` **Three independent sources agree** on the PoolManager address (the deployments page plus
-two unrelated deployed contracts). Full address table remains `docs/RECON.md` §7.
+two unrelated deployed contracts). Full address table remains `docs/RECON.md` §6.
 
 ### Q7 closed — the PoolManager owner
 
@@ -341,7 +341,7 @@ closed as a bounded, non-critical risk.
 
 ## 11. Corrections to earlier recon
 
-`FACT` `docs/RECON.md` §6.2 listed IHooks line numbers and marked the return tuples
+`FACT` `docs/RECON.md` §5.2 listed IHooks line numbers and marked the return tuples
 `UNVERIFIED`. They are now verified in §2 above. One line number in that earlier list was
 approximate (`afterAddLiquidity` was given as 55; the declaration spans 55-62). §2 supersedes it.
 
