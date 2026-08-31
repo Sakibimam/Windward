@@ -6,7 +6,8 @@
  * benefit. `window.ethereum` is read lazily so the module is safe to import during a static build.
  */
 import {
-  createWalletClient, custom, type Address, type Hex, type WalletClient,
+  createPublicClient, createWalletClient, custom,
+  type Address, type Hex, type PublicClient, type WalletClient,
 } from "viem";
 import { unichainSepolia } from "./chain";
 
@@ -32,6 +33,18 @@ export function walletClient(account: Address): WalletClient {
   const p = provider();
   if (!p) throw new Error("No wallet found. Install MetaMask or another injected wallet.");
   return createWalletClient({ account, chain: unichainSepolia, transport: custom(p) });
+}
+
+/**
+ * Reads from the chain the WALLET is connected to, which is not necessarily the one
+ * NEXT_PUBLIC_RPC_URL points at. A receipt for a transaction the wallet just sent can only be
+ * found on the wallet's own chain — looking for it on the configured read RPC is how you get
+ * "Block at number ... could not be found" against a forked node that is frozen behind mainnet.
+ */
+export function walletPublicClient(): PublicClient {
+  const p = provider();
+  if (!p) throw new Error("No wallet found.");
+  return createPublicClient({ chain: unichainSepolia, transport: custom(p) });
 }
 
 export async function connect(): Promise<Address> {

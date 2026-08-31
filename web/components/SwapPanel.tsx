@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Address, Hex } from "viem";
 import {
-  client, readLive, HOOK, POOL_ID, TOKEN0, TOKEN1, SWAP_ROUTER,
+  readLive, HOOK, POOL_ID, TOKEN0, TOKEN1, SWAP_ROUTER,
   poolKey, swapConfigured, erc20Abi, swapRouterAbi, MIN_SQRT_PRICE,
 } from "@/lib/chain";
-import { connect, currentAccount, ensureChain, hasWallet, walletClient, short } from "@/lib/wallet";
+import {
+  connect, currentAccount, ensureChain, hasWallet, walletClient, walletPublicClient, short,
+} from "@/lib/wallet";
 
 type Step = "idle" | "minting" | "approving" | "swapping";
 
@@ -27,10 +29,26 @@ export default function SwapPanel() {
 
   const refreshBalance = useCallback(async (a: Address) => {
     if (!TOKEN0) return;
-    const b = await client.readContract({
+    const b = await walletPublicClient().readContract({
       address: TOKEN0 as Address, abi: erc20Abi, functionName: "balanceOf", args: [a],
     });
     setBal(b);
+  }, []);
+
+  /**
+   * The pool and its tokens live on exactly one chain. If the wallet is pointed somewhere else,
+   * every write silently succeeds against an address with no code — the transaction confirms and
+   * mints nothing. Checking for code first turns that into a message instead of a mystery.
+   */
+  const assertDeployed = useCallback(async () => {
+    const code = await walletPublicClient().getCode({ address: TOKEN0 as Address });
+    if (!code || code === "0x") {
+      throw new Error(
+        "The test tokens do not exist on the network your wallet is connected to. " +
+        "Run script/SeedPool.s.sol against that network, or switch the wallet to the one " +
+        "NEXT_PUBLIC_RPC_URL points at.",
+      );
+    }
   }, []);
 
   useEffect(() => {
@@ -56,6 +74,7 @@ export default function SwapPanel() {
 
   const onMint = () => run(async () => {
     if (!account) return;
+    await assertDeployed();
     setStep("minting"); setMsg("Minting test tokens…");
     const w = walletClient(account);
     for (const t of [TOKEN0, TOKEN1] as Address[]) {
@@ -63,7 +82,7 @@ export default function SwapPanel() {
         address: t, abi: erc20Abi, functionName: "mint",
         args: [account, MINT], chain: undefined, account,
       });
-      await client.waitForTransactionReceipt({ hash: h });
+      await walletPublicClient().waitForTransactionReceipt({ hash: h });
     }
     setMsg("Test tokens minted.");
     await refreshBalance(account);
@@ -71,9 +90,11 @@ export default function SwapPanel() {
 
   const onSwap = () => run(async () => {
     if (!account) return;
-    const before = await readLive(POOL_ID as Hex);
+    await assertDeployed();
+    const wpc = walletPublicClient();
+    const before = await readLive(POOL_ID as Hex, wpc);
 
-    const allowance = await client.readContract({
+    const allowance = await wpc.readContract({
       address: TOKEN0 as Address, abi: erc20Abi, functionName: "allowance",
       args: [account, SWAP_ROUTER],
     });
@@ -85,7 +106,7 @@ export default function SwapPanel() {
         address: TOKEN0 as Address, abi: erc20Abi, functionName: "approve",
         args: [SWAP_ROUTER, 2n ** 255n], chain: undefined, account,
       });
-      await client.waitForTransactionReceipt({ hash: h });
+      await walletPublicClient().waitForTransactionReceipt({ hash: h });
     }
 
     setStep("swapping"); setMsg("Swapping…");
@@ -99,9 +120,9 @@ export default function SwapPanel() {
       ],
       chain: undefined, account,
     });
-    await client.waitForTransactionReceipt({ hash });
+    await walletPublicClient().waitForTransactionReceipt({ hash });
 
-    const after = await readLive(POOL_ID as Hex);
+    const after = await readLive(POOL_ID as Hex, wpc);
     setFee({ before: before.fee, after: after.fee });
     setMsg(
       after.fee === before.fee

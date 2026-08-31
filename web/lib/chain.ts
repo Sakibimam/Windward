@@ -8,7 +8,10 @@
  * Point it at a local fork or at Unichain Sepolia with NEXT_PUBLIC_RPC_URL, and give it a pool
  * with NEXT_PUBLIC_POOL_ID. Both are baked at build time; see .env.example.
  */
-import { createPublicClient, http, defineChain, type Address, type Hex } from "viem";
+import {
+  createPublicClient, http, defineChain,
+  type Address, type Hex, type PublicClient,
+} from "viem";
 
 export const unichainSepolia = defineChain({
   id: 1301,
@@ -69,16 +72,16 @@ export type Live = {
   initialised: boolean;
 };
 
-export async function readLive(poolId: Hex): Promise<Live> {
+export async function readLive(poolId: Hex, on: PublicClient = client): Promise<Live> {
   const [fee, sigma, slot0, block] = await Promise.all([
-    client.readContract({ address: HOOK, abi: hookAbi, functionName: "currentFee", args: [poolId] }),
-    client.readContract({
+    on.readContract({ address: HOOK, abi: hookAbi, functionName: "currentFee", args: [poolId] }),
+    on.readContract({
       address: HOOK, abi: hookAbi, functionName: "currentSigmaWad", args: [poolId],
     }),
-    client.readContract({
+    on.readContract({
       address: STATE_VIEW, abi: stateViewAbi, functionName: "getSlot0", args: [poolId],
     }),
-    client.getBlockNumber(),
+    on.getBlockNumber(),
   ]);
   return {
     fee: Number(fee),
