@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -14,9 +15,16 @@ export default function Nav() {
   return (
     <nav className="nav">
       <div className="shell nav-in">
-        <Link href="/" className="brand">
-          <span className="mark" aria-hidden="true" />
-          Windward
+        <Link href="/" className="brand" aria-label="Windward home">
+          <Image
+            src="/windward-mark.png"
+            alt=""
+            width={30}
+            height={30}
+            className="brand-mark"
+            priority
+          />
+          <span className="brand-name">Windward</span>
         </Link>
         <div className="nav-links">
           {LINKS.map((l) => (
