@@ -22,34 +22,52 @@ export default function SwapPanel() {
   const [err, setErr] = useState<string | null>(null);
   const [fee, setFee] = useState<{ before: number; after: number } | null>(null);
   const [bal, setBal] = useState<bigint | null>(null);
+  // null = not checked yet. false = the tokens are not on the wallet's chain.
+  const [onRightChain, setOnRightChain] = useState<boolean | null>(null);
   // `window.ethereum` does not exist during the static render, so wallet presence can only be
   // decided after mount. Without this a visitor WITH a wallet sees "No wallet detected".
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  const refreshBalance = useCallback(async (a: Address) => {
-    if (!TOKEN0) return;
-    const b = await walletPublicClient().readContract({
-      address: TOKEN0 as Address, abi: erc20Abi, functionName: "balanceOf", args: [a],
-    });
-    setBal(b);
-  }, []);
-
   /**
-   * The pool and its tokens live on exactly one chain. If the wallet is pointed somewhere else,
-   * every write silently succeeds against an address with no code — the transaction confirms and
-   * mints nothing. Checking for code first turns that into a message instead of a mystery.
+   * The pool and its tokens live on exactly one chain. If the wallet is pointed somewhere else
+   * every read returns "0x" and every write is a no-op against an empty address — the swap
+   * confirms, costs gas and does nothing. One `getCode` distinguishes that from a real failure,
+   * so the panel can say which network is wrong instead of throwing a decode error.
    */
-  const assertDeployed = useCallback(async () => {
-    const code = await walletPublicClient().getCode({ address: TOKEN0 as Address });
-    if (!code || code === "0x") {
-      throw new Error(
-        "The test tokens do not exist on the network your wallet is connected to. " +
-        "Run script/SeedPool.s.sol against that network, or switch the wallet to the one " +
-        "NEXT_PUBLIC_RPC_URL points at.",
-      );
+  const checkChain = useCallback(async () => {
+    if (!TOKEN0) return false;
+    try {
+      const code = await walletPublicClient().getCode({ address: TOKEN0 as Address });
+      const ok = Boolean(code && code !== "0x");
+      setOnRightChain(ok);
+      return ok;
+    } catch {
+      setOnRightChain(false);
+      return false;
     }
   }, []);
+
+  const refreshBalance = useCallback(async (a: Address) => {
+    if (!TOKEN0) return;
+    if (!(await checkChain())) { setBal(null); return; }
+    try {
+      const b = await walletPublicClient().readContract({
+        address: TOKEN0 as Address, abi: erc20Abi, functionName: "balanceOf", args: [a],
+      });
+      setBal(b);
+    } catch {
+      setBal(null);
+    }
+  }, [checkChain]);
+
+  const assertDeployed = useCallback(async () => {
+    if (!(await checkChain())) {
+      throw new Error(
+        "The test tokens are not deployed on the network your wallet is connected to.",
+      );
+    }
+  }, [checkChain]);
 
   useEffect(() => {
     currentAccount().then((a) => {
@@ -165,13 +183,28 @@ export default function SwapPanel() {
         )}
       </div>
 
+      {account && onRightChain === false && (
+        <div className="swap-warn">
+          <p>
+            <strong>Wrong network for this pool.</strong> The test tokens have no code at{" "}
+            <code>{short(TOKEN0 as string)}</code> on the chain your wallet is connected to, so a
+            swap here would confirm, cost gas and do nothing.
+          </p>
+          <p className="mono">
+            Seed the pool on that network:{" "}
+            <code>forge script script/SeedPool.s.sol:SeedPool --rpc-url &lt;rpc&gt; --broadcast</code>
+            {" "}— then put the printed addresses in <code>web/.env.local</code>.
+          </p>
+        </div>
+      )}
+
       {account && (
         <>
           <div className="swap-actions">
-            <button className="btn ghost" onClick={onMint} disabled={busy}>
+            <button className="btn ghost" onClick={onMint} disabled={busy || onRightChain === false}>
               {step === "minting" ? "Minting…" : "Mint test tokens"}
             </button>
-            <button className="btn" onClick={onSwap} disabled={busy || bal === 0n}>
+            <button className="btn" onClick={onSwap} disabled={busy || bal === 0n || onRightChain === false}>
               {step === "approving" ? "Approving…" : step === "swapping" ? "Swapping…" : "Swap 200 WTA"}
             </button>
             {bal !== null && (
