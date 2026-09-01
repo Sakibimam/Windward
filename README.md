@@ -36,6 +36,28 @@ by the fee it was charged and measure the move that followed: the top decile pre
 
 Windward is the hook that prices that third signal — no oracle, no external call, no admin key.
 
+## Who this is for
+
+**Windward prices movement, not motive.** It cannot read intent, and it does not try to — a large
+honest buy and the first leg of a pump produce the same tick move, and the hook charges the same
+for both. What it does is make *whatever trades next after a violent move* pay more.
+
+That matters most where violent moves are the norm and the flow around them is predatory:
+
+- **Token launches.** A large buy walks the price; every swap that follows — including the dump
+  leg — is repriced upward until the pool settles. The cost of the round trip rises with the
+  disruption it caused.
+- **Pumps and dumps.** Same mechanism, same asymmetry: the calm pool stays cheap, the violent one
+  gets expensive, and nobody has to be identified for it to work.
+- **Ordinary flow.** A quiet pool sits at its floor, so retail in a calm market pays the base fee.
+  This is the half the decile table measures directly: the bottom fee decile precedes the
+  smallest moves.
+
+**What is NOT claimed.** That this detects malicious intent — it does not, and no signal here
+distinguishes a legitimate large trade from a hostile one. And that LPs end up better off: fee
+revenue is not LP PnL, and there is no demand-elasticity model for flow that leaves at a higher
+fee. Both remain **UNPROVEN**. See Limitations.
+
 ## Does the fee actually track volatility?
 
 This needs a null — otherwise "our fee varies a lot" proves nothing, since a random number

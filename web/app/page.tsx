@@ -69,6 +69,52 @@ export default function Page() {
         </div>
       </header>
 
+      {/* -------------------------------------------------------------- who for */}
+      <section>
+        <div className="shell">
+          <p className="eyebrow">Who this is for</p>
+          <h2 className="head">It prices movement, not motive.</h2>
+          <p className="narrow">
+            Windward cannot read intent and does not try to. A large honest buy and the first leg
+            of a pump produce the same tick move, and the hook charges the same for both. What it
+            does is make <em>whatever trades next after a violent move</em> pay more — which
+            matters most where violent moves are the norm and the flow around them is predatory.
+          </p>
+          <div className="cards">
+            <div className="card">
+              <h3>Token launches</h3>
+              <p>
+                A large buy walks the price; every swap that follows — including the dump leg — is
+                repriced upward until the pool settles. The round trip costs more the more it
+                disrupted.
+              </p>
+            </div>
+            <div className="card">
+              <h3>Pumps and dumps</h3>
+              <p>
+                Same mechanism, same asymmetry. The calm pool stays cheap, the violent one gets
+                expensive, and nobody has to be identified for it to work.
+              </p>
+            </div>
+            <div className="card">
+              <h3>Ordinary flow</h3>
+              <p>
+                A quiet pool sits at its floor, so retail in a calm market pays the base fee. The
+                bottom fee decile precedes the smallest moves — that half is measured directly.
+              </p>
+            </div>
+            <div className="card">
+              <h3>What is not claimed</h3>
+              <p>
+                That it detects malicious <em>intent</em> — no signal here separates a legitimate
+                large trade from a hostile one. And that LPs end up better off. Both remain
+                unproven.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ------------------------------------------------------------------ cta */}
       <section className="cta-band">
         <div className="shell">
