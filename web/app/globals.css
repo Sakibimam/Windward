@@ -198,11 +198,39 @@ a { color: var(--signal); text-underline-offset: 3px; }
 @media (max-width: 620px) { .nav-links { padding: 3px; } .nav-l { padding: 7px 11px; font-size: 12.5px; } }
 
 /* -------------------------------------------------------------- page heads */
-.hero { padding: clamp(84px, 12vw, 170px) 0 clamp(70px, 9vw, 120px); text-align: center; }
+/* The hero owns the first screen. The nav is 80px (14 + 52 + 14) and sits in flow above it, so
+   the hero takes what is left; svh keeps mobile browser chrome from cropping it. Content is
+   centred in that box rather than pushed down by padding, so it holds at any viewport height. */
+.hero {
+  min-height: calc(100vh - 80px);
+  min-height: calc(100svh - 80px);
+  display: flex; align-items: center;
+  padding: 40px 0 96px; text-align: center; position: relative;
+}
+.hero .shell { width: 100%; }
+
+/* A full-height hero hides the fact that anything follows it, so say so. */
+.scroll-cue {
+  position: absolute; left: 50%; bottom: 34px; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 9px;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--fg-3); text-decoration: none;
+  transition: color 0.2s;
+}
+.scroll-cue:hover { color: var(--fg-2); }
+.scroll-cue i {
+  width: 1px; height: 30px; display: block;
+  background: linear-gradient(180deg, var(--rule-3), transparent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .scroll-cue i { animation: cue 2.4s ease-in-out infinite; transform-origin: top; }
+  @keyframes cue { 0%, 100% { transform: scaleY(0.5); opacity: 0.5; } 50% { transform: scaleY(1); opacity: 1; } }
+}
+@media (max-height: 640px) { .scroll-cue { display: none; } .hero { padding-bottom: 40px; } }
 .hero .shell > * { margin-left: auto; margin-right: auto; }
 .hero .eyebrow { justify-content: center; }
 .hero .lede { max-width: 56ch; }
-.hero-actions { justify-content: center; }
+.hero .hero-actions { justify-content: center; }
 .hero-h { font-size: clamp(38px, 5.6vw, 64px); margin-bottom: 22px; }
 .page-head { padding: clamp(48px, 5vw, 64px) 0 8px; }
 .page-h { font-size: clamp(31px, 4.4vw, 47px); margin-bottom: 16px; }

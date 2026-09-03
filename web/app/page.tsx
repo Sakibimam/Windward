@@ -29,10 +29,14 @@ export default function Page() {
             <Link href="/docs" className="btn ghost">Read the docs</Link>
           </div>
         </div>
+        <a href="#regimes" className="scroll-cue" aria-label="Scroll to the fee regimes">
+          <span>Scroll</span>
+          <i aria-hidden="true" />
+        </a>
       </header>
 
       {/* --------------------------------------------------------- the picture */}
-      <section className="tight">
+      <section className="tight" id="regimes">
         <div className="shell">
           <FeeStates />
           <p className="caption">
