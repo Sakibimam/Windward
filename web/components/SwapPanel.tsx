@@ -14,6 +14,8 @@ type Step = "idle" | "minting" | "approving" | "swapping";
 
 const AMOUNT = 200n * 10n ** 18n; // large enough to move the tick on the seeded pool
 const MINT = 1_000_000n * 10n ** 18n;
+/** Below this an account cannot cover a mint plus a swap, so the faucet notice is worth showing. */
+const GAS_FLOOR = 10n ** 14n; // 0.0001 ETH
 
 export default function SwapPanel() {
   const [account, setAccount] = useState<Address | null>(null);
@@ -204,24 +206,16 @@ export default function SwapPanel() {
         </div>
       )}
 
-      {account && ethBal === 0n && (
-        <div className="swap-warn" style={{ marginBottom: "1rem" }}>
+      {account && ethBal !== null && ethBal < GAS_FLOOR && (
+        <div className="swap-warn">
           <p>
-            <strong>Unichain Sepolia Testnet Gas Required:</strong> Minting tokens and swapping are free, but the testnet sequencer requires a tiny fraction of testnet ETH for transaction gas.
+            <strong>You need testnet gas.</strong> The tokens and the swap are free, but Unichain
+            Sepolia still charges gas to include the transaction, and this account cannot cover it.
           </p>
-          <p style={{ marginTop: "0.5rem" }}>
-            Get free testnet ETH:{" "}
-            <a href="https://faucet.ethglobal.com/" target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>
-              ETHGlobal Faucet
-            </a>{" "}
-            ·{" "}
-            <a href="https://thirdweb.com/unichain-sepolia-testnet/" target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>
-              Thirdweb Faucet
-            </a>{" "}
-            ·{" "}
-            <a href="https://superbridge.app/unichain-sepolia" target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>
-              Superbridge (Bridge Sepolia ETH)
-            </a>
+          <p className="faucets">
+            <a href="https://faucet.ethglobal.com/" target="_blank" rel="noreferrer">ETHGlobal faucet</a>
+            <a href="https://thirdweb.com/unichain-sepolia-testnet/" target="_blank" rel="noreferrer">thirdweb faucet</a>
+            <a href="https://superbridge.app/unichain-sepolia" target="_blank" rel="noreferrer">Bridge from Sepolia</a>
           </p>
         </div>
       )}

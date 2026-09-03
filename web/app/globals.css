@@ -403,6 +403,9 @@ td.num { font-family: var(--mono); font-size: 13px; white-space: nowrap; }
 .swap-warn p { font-size: 13px; line-height: 1.6; color: var(--fg-2); margin: 0; }
 .swap-warn p + p { margin-top: 8px; font-size: 11.5px; color: var(--fg-3); }
 .swap-warn code { font-size: 11.5px; word-break: break-all; }
+.swap-warn .faucets { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; }
+.swap-warn .faucets a { font-size: 12px; color: var(--signal-2); text-decoration: none; }
+.swap-warn .faucets a:hover { text-decoration: underline; }
 
 /* ------------------------------------------------------- fee-state scenarios */
 .states {
