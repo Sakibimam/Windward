@@ -94,4 +94,35 @@ export async function ensureChain(): Promise<void> {
   }
 }
 
+/**
+ * Forget the connection.
+ *
+ * EIP-1193 has no logout: a page cannot make a wallet forget it, and clearing local state alone
+ * leaves the site still authorised, so the next "connect" reconnects silently with no prompt.
+ * `wallet_revokePermissions` actually withdraws the grant, but it is a MetaMask extension that
+ * other wallets reject, so a failure here is expected rather than exceptional. The caller clears
+ * its own state either way.
+ */
+export async function disconnect(): Promise<void> {
+  const p = provider();
+  if (!p) return;
+  try {
+    await p.request({ method: "wallet_revokePermissions", params: [{ eth_accounts: {} }] });
+  } catch {
+    // Wallet does not support revocation. The account is dropped locally regardless.
+  }
+}
+
+/** Follow the wallet's own account switching and disconnects. Returns an unsubscribe function. */
+export function onAccountsChanged(fn: (a: Address | null) => void): () => void {
+  const p = provider();
+  if (!p?.on) return () => {};
+  const handler = (...args: unknown[]) => {
+    const accounts = args[0] as Address[] | undefined;
+    fn(accounts?.length ? accounts[0] : null);
+  };
+  p.on("accountsChanged", handler);
+  return () => p.removeListener?.("accountsChanged", handler);
+}
+
 export const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;

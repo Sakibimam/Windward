@@ -7,7 +7,8 @@ import {
   poolKey, swapConfigured, erc20Abi, swapRouterAbi, MIN_SQRT_PRICE,
 } from "@/lib/chain";
 import {
-  connect, currentAccount, ensureChain, hasWallet, walletClient, walletPublicClient, short,
+  connect, currentAccount, disconnect, ensureChain, hasWallet, onAccountsChanged,
+  walletClient, walletPublicClient, short,
 } from "@/lib/wallet";
 
 type Step = "idle" | "minting" | "approving" | "swapping";
@@ -77,11 +78,31 @@ export default function SwapPanel() {
     }
   }, [checkChain]);
 
+  const clearSession = useCallback(() => {
+    setAccount(null); setBal(null); setEthBal(null);
+    setFee(null); setMsg(null); setErr(null); setOnRightChain(null);
+  }, []);
+
+  const onDisconnect = () => run(async () => {
+    await disconnect();
+    clearSession();
+    setMsg("Wallet disconnected.");
+  });
+
   useEffect(() => {
     currentAccount().then((a) => {
       if (a) { setAccount(a); refreshBalance(a); }
     }).catch(() => {});
   }, [refreshBalance]);
+
+  // A disconnect or account switch made in the wallet itself has to reach the page too, or the
+  // panel keeps showing an address the wallet no longer considers connected.
+  useEffect(() => {
+    return onAccountsChanged((a) => {
+      if (!a) { clearSession(); return; }
+      setAccount(a); setFee(null); setMsg(null); refreshBalance(a);
+    });
+  }, [clearSession, refreshBalance]);
 
   const run = async (fn: () => Promise<void>) => {
     setErr(null);
@@ -185,7 +206,12 @@ export default function SwapPanel() {
           </p>
         </div>
         {account ? (
-          <span className="acct mono">{short(account)}</span>
+          <span className="acct-row">
+            <span className="acct mono">{short(account)}</span>
+            <button type="button" className="acct-out" onClick={onDisconnect} disabled={busy}>
+              Disconnect
+            </button>
+          </span>
         ) : (
           <button className="btn" onClick={onConnect} disabled={mounted && !hasWallet()}>
             {!mounted ? "Connect wallet" : hasWallet() ? "Connect wallet" : "No wallet detected"}
