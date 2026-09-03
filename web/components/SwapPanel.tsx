@@ -147,6 +147,8 @@ export default function SwapPanel() {
       chain: undefined, account,
     });
     await walletPublicClient().waitForTransactionReceipt({ hash });
+    // Let the live chart mark its next sample, so the visitor can see which point was theirs.
+    window.dispatchEvent(new CustomEvent("windward:swap"));
 
     const after = await readLive(POOL_ID as Hex, wpc);
     setFee({ before: before.fee, after: after.fee });
