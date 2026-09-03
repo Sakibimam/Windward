@@ -226,6 +226,12 @@ a { color: var(--signal); text-underline-offset: 3px; }
 .hero .shell > * { margin-left: auto; margin-right: auto; }
 .hero .eyebrow { justify-content: center; }
 .hero .hero-actions { justify-content: center; }
+/* Only in the hero: the headline is already carrying the page's one piece of colour, so the
+   actions stay neutral there. Everywhere else the gradient primary is the house style. */
+.hero .btn { background: var(--fg); color: var(--ink); }
+.hero .btn:hover { filter: none; opacity: 0.88; }
+.hero .btn.ghost { background: var(--rule-2); color: var(--fg); border-color: var(--rule); }
+.hero .btn.ghost:hover { background: var(--rule); opacity: 1; }
 .hero-h { font-size: clamp(40px, 6.2vw, 72px); margin-bottom: 24px; }
 .page-head { padding: clamp(48px, 5vw, 64px) 0 8px; }
 .page-h { font-size: clamp(31px, 4.4vw, 47px); margin-bottom: 16px; }
@@ -371,14 +377,14 @@ td.num { font-family: var(--mono); font-size: 13px; white-space: nowrap; }
 .btn {
   font-family: var(--sans); font-size: 14.5px; font-weight: 500;
   padding: 15px 32px; border-radius: 999px; border: 1px solid transparent;
-  background: var(--fg); color: var(--ink); cursor: pointer; text-decoration: none;
+  background: var(--wave); color: #12060f; cursor: pointer; text-decoration: none;
   display: inline-block; transition: opacity 0.18s, background 0.18s, transform 0.18s;
 }
-.btn:hover { opacity: 0.88; }
+.btn:hover { filter: brightness(1.12); }
 .btn:active { transform: translateY(1px); }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; filter: none; }
-.btn.ghost { background: var(--rule-2); color: var(--fg); border-color: var(--rule); }
-.btn.ghost:hover { background: var(--rule-2); border-color: var(--rule-3); opacity: 1; }
+.btn.ghost { background: none; color: var(--signal); border-color: var(--signal-dim); }
+.btn.ghost:hover { background: var(--signal-soft); filter: none; }
 .btn.big { font-size: 15px; padding: 15px 32px; margin-top: 6px; }
 .cta-band { background: linear-gradient(180deg, var(--violet-soft), var(--ink) 80%); }
 .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 40px; }

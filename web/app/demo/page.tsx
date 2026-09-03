@@ -14,8 +14,9 @@ export default function DemoPage() {
             Three ways to watch the same fee move.
           </h1>
           <p className="lede narrow">
-            The mechanism runs locally in your browser, the deployed contract answers over RPC, and
-            you can trade the pool yourself. None of it is a mock.
+            The arithmetic is the deployed contract&rsquo;s, the chain reads are live, and the
+            trades are your own. The one invented thing on this page is the order flow in the first
+            panel, and the maths running on it is not.
           </p>
         </div>
       </header>
