@@ -1,8 +1,40 @@
 import Link from "next/link";
 import { gas, gasEcon, fmt, v1 } from "@/lib/data";
-import { DEPLOYED } from "@/lib/volatility";
+import { DEPLOYED, WAD, update, feeFor, sigmaWad, decayFactor } from "@/lib/volatility";
 
 const REPO = "https://github.com/Sakibimam/Windward";
+
+const { feeMin, feeMax, feePerSigma, halfLife } = DEPLOYED;
+const pct = (pips: number) => `${(pips / 10000).toFixed(3)}%`;
+
+/** One observation from a standing start, run through the deployed estimator at build time. */
+function observe(moveTicks: number, seconds: bigint) {
+  const variance = update(0n, 0n, BigInt(moveTicks), seconds, halfLife);
+  return {
+    moveTicks,
+    seconds: Number(seconds),
+    sigma: Number((sigmaWad(variance) * 100n) / WAD) / 100,
+    fee: Number(feeFor(variance, feeMin, feeMax, feePerSigma)),
+    variance,
+  };
+}
+
+const EXAMPLES = [
+  observe(1, 12n),
+  observe(10, 5n),
+  observe(40, 2n),
+  observe(120, 1n),
+  observe(400, 1n),
+];
+
+/** The same hot pool, left alone. Nothing trades; only time passes. */
+const HOT = EXAMPLES[EXAMPLES.length - 1].variance;
+const DECAY = [0, 300, 900, 1800, 3600].map((secs) => ({
+  secs,
+  fee: Number(
+    feeFor((decayFactor(BigInt(secs), halfLife) * HOT) / WAD, feeMin, feeMax, feePerSigma),
+  ),
+}));
 
 export const metadata = {
   title: "Docs · Windward",
@@ -21,14 +53,61 @@ export default function Docs() {
             including the ones that undercut the result.
           </p>
           <nav className="toc">
+            <a href="#start">Start here</a>
             <a href="#mechanism">Mechanism</a>
             <a href="#parameters">Parameters</a>
             <a href="#integrate">Integration</a>
             <a href="#deploy">Deployment</a>
             <a href="#limits">Limits</a>
+            <a href="#words">Glossary</a>
           </nav>
         </div>
       </header>
+
+      {/* ---------------------------------------------------------------- start */}
+      <section id="start">
+        <div className="shell">
+          <p className="eyebrow">Start here</p>
+          <h2 className="head">What the hook actually does.</h2>
+          <p className="narrow">
+            A Uniswap pool normally charges one fixed fee. Windward replaces that with a fee that
+            follows how much the pool is moving, and it works out the number itself, from the
+            pool&rsquo;s own trading history. Nothing feeds it from outside.
+          </p>
+          <div className="cards">
+            <div className="card">
+              <h3>When the pool is quiet</h3>
+              <p>
+                Small price moves, minutes apart. The fee sits at its floor of{" "}
+                <strong>{pct(Number(feeMin))}</strong>, which is what an ordinary 0.05% pool would
+                have charged anyway.
+              </p>
+            </div>
+            <div className="card">
+              <h3>When the pool is moving hard</h3>
+              <p>
+                Large moves, seconds apart. The fee climbs, up to a hard ceiling of{" "}
+                <strong>{pct(Number(feeMax))}</strong>. It can never go above that, whatever
+                happens.
+              </p>
+            </div>
+            <div className="card">
+              <h3>When trading stops</h3>
+              <p>
+                The fee falls again on its own, purely because time passes. No one has to trade,
+                and there is no keeper or admin to poke it.
+              </p>
+            </div>
+          </div>
+          <p className="narrow" style={{ marginTop: 22 }}>
+            <strong>Who pays what.</strong> The fee is decided <em>before</em> a swap runs, from
+            what already happened. So the trader who causes a big move pays the old, lower fee, and
+            whoever trades next pays the raised one. That ordering is a property of every fee that
+            reacts to price rather than predicting it, and it is stated again under{" "}
+            <a href="#limits">Limits</a>.
+          </p>
+        </div>
+      </section>
 
       {/* ------------------------------------------------------------ mechanism */}
       <section id="mechanism">
@@ -81,6 +160,64 @@ export default function Docs() {
             <strong>{v1.pctObservationsRoundingToZero}%</strong> of real observations to zero,
             which is the bug the study found. And when <code>Δt</code> is zero the anchor is held
             rather than updated, which is what stops a dust swap suppressing the estimate.
+          </p>
+
+          <h3 className="sub-head">What that produces, in numbers</h3>
+          <p className="narrow">
+            Every row below is computed when this page is built, by the same code the deployed
+            contract runs. A tick is Uniswap&rsquo;s smallest price step, about one hundredth of
+            one percent.
+          </p>
+          <div className="tw">
+            <table>
+              <thead>
+                <tr>
+                  <th>The pool moves</th><th>In</th><th>σ</th><th>Fee charged next</th>
+                </tr>
+              </thead>
+              <tbody>
+                {EXAMPLES.map((e) => (
+                  <tr key={e.moveTicks}>
+                    <td className="num">{e.moveTicks} tick{e.moveTicks === 1 ? "" : "s"}</td>
+                    <td className="num">{e.seconds}s</td>
+                    <td className="num">{e.sigma.toFixed(2)}</td>
+                    <td className="num"><strong>{pct(e.fee)}</strong> <span className="mono">({e.fee} pips)</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="narrow">
+            Each row starts from a calm pool and applies one observation, so a real pool that is
+            already busy reaches a given fee sooner than this suggests.
+          </p>
+
+          <h3 className="sub-head">And what happens when trading stops</h3>
+          <p className="narrow">
+            Taking the last row above, a pool at {pct(DECAY[0].fee)}, and then letting it sit with
+            nobody trading at all:
+          </p>
+          <div className="tw">
+            <table>
+              <thead><tr><th>Time with no trades</th><th>Fee</th></tr></thead>
+              <tbody>
+                {DECAY.map((d) => (
+                  <tr key={d.secs}>
+                    <td className="num">
+                      {d.secs === 0 ? "immediately after" : d.secs < 3600
+                        ? `${d.secs / 60} minutes`
+                        : `${d.secs / 3600} hour`}
+                    </td>
+                    <td className="num"><strong>{pct(d.fee)}</strong> <span className="mono">({d.fee} pips)</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="narrow">
+            The estimate halves every <strong>{halfLife.toString()} seconds</strong> of silence.
+            Nothing runs to make this happen: the decay is applied at the moment the fee is read,
+            so an idle pool is already cheap by the time anyone asks.
           </p>
         </div>
       </section>
@@ -251,6 +388,68 @@ export default function Docs() {
               meant to offset.
             </li>
           </ol>
+        </div>
+      </section>
+
+      {/* ------------------------------------------------------------- glossary */}
+      <section id="words">
+        <div className="shell">
+          <p className="eyebrow">Glossary</p>
+          <h2 className="head">The words on this page, in plain English.</h2>
+          <div className="tw">
+            <table>
+              <tbody>
+                <tr>
+                  <th>Tick</th>
+                  <td>Uniswap&rsquo;s smallest price step, roughly one hundredth of one percent. A pool that moves 100 ticks has moved about 1%.</td>
+                </tr>
+                <tr>
+                  <th>Pip</th>
+                  <td>One hundredth of one percent of a trade, the unit fees are quoted in. 500 pips is 0.05%; 10,000 pips is 1%.</td>
+                </tr>
+                <tr>
+                  <th>Variance</th>
+                  <td>How much the price has been jumping around, squared and averaged. Squaring is what makes one big move count for more than several small ones.</td>
+                </tr>
+                <tr>
+                  <th>σ (sigma)</th>
+                  <td>The square root of variance, back in the units you started in. This is the number the fee is scaled from.</td>
+                </tr>
+                <tr>
+                  <th>EWMA</th>
+                  <td>Exponentially weighted moving average. An average that leans on recent readings and lets old ones fade, rather than treating a move from an hour ago as equal to one from a second ago.</td>
+                </tr>
+                <tr>
+                  <th>Half-life</th>
+                  <td>How long the estimate takes to lose half its weight. At {halfLife.toString()} seconds, a reading counts half as much five minutes later and a quarter as much ten minutes later.</td>
+                </tr>
+                <tr>
+                  <th>Decile</th>
+                  <td>One tenth of the data, sorted. &ldquo;Top fee decile&rdquo; means the tenth of swaps that paid the highest fees.</td>
+                </tr>
+                <tr>
+                  <th>Shuffled null</th>
+                  <td>A control. The same real numbers put in a random order, so any pattern that survives is coming from the ordering rather than from the numbers themselves.</td>
+                </tr>
+                <tr>
+                  <th>WAD</th>
+                  <td>Fixed-point arithmetic scaled by 10<sup>18</sup>. Solidity has no decimals, so fractions are carried as very large integers.</td>
+                </tr>
+                <tr>
+                  <th>Hook</th>
+                  <td>A contract Uniswap v4 calls at set moments during a swap. This one is called just before and just after.</td>
+                </tr>
+                <tr>
+                  <th>Immutable</th>
+                  <td>Fixed at deployment and unchangeable afterwards, by anyone including us. A pool wanting different numbers has to deploy its own copy.</td>
+                </tr>
+                <tr>
+                  <th>C-1</th>
+                  <td>Our label for the one security finding still open. Buy and sell inside a single block and the hook&rsquo;s record of &ldquo;where the price was&rdquo; can stick at a price that never really held, so the next honest trader is charged for a move that did not happen. It cannot move anyone&rsquo;s funds.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
