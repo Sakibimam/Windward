@@ -24,8 +24,11 @@ export const unichainSepolia = defineChain({
 export const HOOK: Address = "0x609634584d5BD12Ba4216116528e364d385Ad0C0";
 export const STATE_VIEW: Address = "0xc199F1072a74D4e905ABa1A84d9a45E2546B6222";
 
-export const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL ?? "https://sepolia.unichain.org";
-export const POOL_ID = (process.env.NEXT_PUBLIC_POOL_ID ??
+export const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || "https://sepolia.unichain.org";
+// `||`, not `??`: Vercel bakes an env var that is *declared but blank* in as "", which is not
+// nullish and would slip past `??` — reinstating the "trading is not configured" placeholder on a
+// deployment that looks correctly configured.
+export const POOL_ID = (process.env.NEXT_PUBLIC_POOL_ID ||
   "0xcb2490fbcdd52b3644f0a43bde9b1cacb8e5d7755811a8e1048b429ec5c3b56e") as Hex | "";
 
 export const client = createPublicClient({
@@ -98,13 +101,12 @@ export async function readLive(poolId: Hex, on: PublicClient = client): Promise<
  * Set by `forge script script/SeedPool.s.sol:SeedPool`, which prints all three.
  * See web/.env.example.
  */
-export const TOKEN0 = (process.env.NEXT_PUBLIC_TOKEN0 ??
+export const TOKEN0 = (process.env.NEXT_PUBLIC_TOKEN0 ||
   "0x4A22eB0fFE708E2F679c150B6980aF1FE654d178") as Address | "";
-export const TOKEN1 = (process.env.NEXT_PUBLIC_TOKEN1 ??
+export const TOKEN1 = (process.env.NEXT_PUBLIC_TOKEN1 ||
   "0xb3Eb2eCE43fbD8cFAE6F24bE8a7F42402172A08d") as Address | "";
-export const SWAP_ROUTER: Address =
-  (process.env.NEXT_PUBLIC_SWAP_ROUTER as Address) ??
-  "0x9140a78c1A137c7fF1c151EC8231272aF78a99A4";
+export const SWAP_ROUTER = (process.env.NEXT_PUBLIC_SWAP_ROUTER ||
+  "0x9140a78c1A137c7fF1c151EC8231272aF78a99A4") as Address;
 
 export const TICK_SPACING = 60;
 export const DYNAMIC_FEE_FLAG = 0x800000;
