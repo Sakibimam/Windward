@@ -39,6 +39,3 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
-# synced from ../data at predev/prebuild — single source of truth lives there
-/data

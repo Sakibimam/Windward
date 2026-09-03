@@ -11,12 +11,20 @@ const to = join(here, "..", "data");
 const files = ["economics.json", "stats.json", "staleness.json", "gas_overhead.json", "gas_economics.json"];
 
 mkdirSync(to, { recursive: true });
+let copied = 0;
 for (const f of files) {
   const src = join(from, f);
-  if (!existsSync(src)) {
-    console.error(`sync-data: missing ${src} — run analysis/run.sh first`);
+  const dest = join(to, f);
+  if (existsSync(src)) {
+    copyFileSync(src, dest);
+    copied++;
+  } else if (!existsSync(dest)) {
+    console.error(`sync-data: missing ${src} and no pre-existing ${dest} found — run analysis/run.sh first`);
     process.exit(1);
   }
-  copyFileSync(src, join(to, f));
 }
-console.log(`sync-data: copied ${files.length} files from data/`);
+if (copied > 0) {
+  console.log(`sync-data: copied ${copied} files from data/`);
+} else {
+  console.log(`sync-data: using pre-existing data files in web/data/`);
+}

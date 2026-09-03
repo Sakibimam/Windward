@@ -1,0 +1,1 @@
+{"gasOverhead":12221,"unhookedSwapGas":71259,"hookedSwapGas":83480,"overheadPctOfUnhooked":17,"runs":5,"note":"measured by test/WindwardGas.t.sol on a local Deployers harness, not on mainnet"}

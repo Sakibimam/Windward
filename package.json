@@ -1,0 +1,13 @@
+{
+  "name": "unisurf-project",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "cd web && npm install && npm run build",
+    "dev": "cd web && npm run dev",
+    "start": "cd web && npm run start"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
