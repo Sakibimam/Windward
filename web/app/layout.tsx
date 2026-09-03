@@ -28,7 +28,7 @@ const mono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "Windward",
   description:
-    "A Uniswap v4 hook that prices volatility from the pool's own tick history — and the shuffled-null control built to falsify it.",
+    "A Uniswap v4 hook that prices volatility from the pool's own tick history, and the shuffled-null control built to falsify it.",
   icons: { icon: "/windward-mark.png" },
 };
 

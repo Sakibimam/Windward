@@ -64,7 +64,7 @@ export default function LiveFee() {
         <p className="mono">
           No pool configured. Create one with{" "}
           <code>forge script script/SeedPool.s.sol:SeedPool</code>, then set{" "}
-          <code>NEXT_PUBLIC_POOL_ID</code> and <code>NEXT_PUBLIC_RPC_URL</code> — see{" "}
+          <code>NEXT_PUBLIC_POOL_ID</code> and <code>NEXT_PUBLIC_RPC_URL</code>. See{" "}
           <code>web/.env.example</code>. Pools in v4 are permissionless; the hook simply had none
           yet.
         </p>
@@ -88,7 +88,7 @@ export default function LiveFee() {
         <p className="mono live-err">Reading the hook…</p>
       ) : !live.initialised ? (
         <p className="mono live-err">
-          That pool id has no price yet — it was never initialised on this RPC.
+          That pool id has no price yet. It was never initialised on this RPC.
         </p>
       ) : (
         <div className="live-grid">
@@ -116,7 +116,7 @@ export default function LiveFee() {
       {hist.length > 1 && <LiveChart hist={hist} />}
 
       <p className="mono live-foot">
-        Read directly from <code>{HOOK.slice(0, 10)}…{HOOK.slice(-6)}</code> — no wallet, no
+        Read directly from <code>{HOOK.slice(0, 10)}…{HOOK.slice(-6)}</code>. No wallet, no
         signing. Every point is one poll of <code>currentFee</code>. Swap below, or run{" "}
         <code>script/Trade.s.sol</code>, and the line moves within seconds.
       </p>

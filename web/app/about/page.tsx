@@ -3,7 +3,7 @@ import {
   liftRange, nullLiftRange, distinctRealRange, distinctNullRange, fmt,
 } from "@/lib/data";
 
-export const metadata = { title: "Method — Windward" };
+export const metadata = { title: "Method · Windward" };
 
 const r2 = ([a, b]: readonly [number, number], d = 2) => `${a.toFixed(d)}–${b.toFixed(d)}`;
 const ri = ([a, b]: readonly [number, number]) => `${fmt(a)}–${fmt(b)}`;
@@ -19,7 +19,7 @@ export default function AboutPage() {
           </h1>
           <p className="lede narrow">
             A fee that varies is not evidence of anything. This is the work that separates a
-            signal from an expensive random number generator — including the parts where our own
+            signal from an expensive random number generator, including the parts where our own
             numbers did not survive it.
           </p>
         </div>
@@ -31,7 +31,7 @@ export default function AboutPage() {
           <p className="eyebrow">The part most submissions skip</p>
           <h2 className="head">We ran that control against our own headline metrics. They failed.</h2>
           <p className="narrow">
-            This project used to lead on two numbers. Shuffled noise reproduces both — and on one
+            This project used to lead on two numbers. Shuffled noise reproduces both, and on one
             pool the null scores <em>better</em> than the real data. Neither can separate a working
             fee from a random one, so they were cut from the claim rather than quietly kept.
           </p>
@@ -44,19 +44,19 @@ export default function AboutPage() {
                 <tr>
                   <td>Never sits at the fee floor</td>
                   <td className="num">0.0%</td><td className="num">0.0%</td>
-                  <td className="cut">Cut — proves nothing</td>
+                  <td className="cut">Cut. Proves nothing</td>
                 </tr>
                 <tr>
                   <td>Distinct fee values</td>
                   <td className="num">{ri(distinctRealRange)}</td>
                   <td className="num">{ri(distinctNullRange)}</td>
-                  <td className="cut">Cut — the null wins a pool</td>
+                  <td className="cut">Cut. The null wins a pool</td>
                 </tr>
                 <tr>
                   <td>Decile lift vs realised move</td>
                   <td className="num">{r2(liftRange)}×</td>
                   <td className="num">{r2(nullLiftRange)}×</td>
-                  <td className="keep">Kept — this is the claim</td>
+                  <td className="keep">Kept. This is the claim</td>
                 </tr>
               </tbody>
             </table>
@@ -78,7 +78,7 @@ export default function AboutPage() {
             <strong>{v1.pctObservationsRoundingToZero}%</strong> of real observations to{" "}
             <strong>zero</strong>. The &ldquo;dynamic&rdquo; fee sat at its floor on{" "}
             <strong>{swapWeighted.shipped_v1_pctAtFeeFloor}%</strong> of swaps and took{" "}
-            <strong>{ri(v1Distinct)}</strong> distinct values — a static fee wearing a dynamic
+            <strong>{ri(v1Distinct)}</strong> distinct values: a static fee wearing a dynamic
             fee&rsquo;s clothes. Every unit test passed throughout, because they used synthetic
             swaps large enough to step straight over the truncation.
           </p>

@@ -154,7 +154,7 @@ export default function SwapPanel() {
     setFee({ before: before.fee, after: after.fee });
     setMsg(
       after.fee === before.fee
-        ? "Swap landed, fee unchanged — it probably shared a block with the last one (dt = 0, ignored by design). Wait a few seconds and swap again."
+        ? "Swap landed, fee unchanged. It probably shared a block with the last one, and same-block swaps are ignored by design. Wait a few seconds and swap again."
         : "Swap landed. The fee moved.",
     );
     await refreshBalance(account);
@@ -166,7 +166,7 @@ export default function SwapPanel() {
         <p className="mono">
           Trading is not configured. Run <code>script/SeedPool.s.sol</code>, then set{" "}
           <code>NEXT_PUBLIC_TOKEN0</code>, <code>NEXT_PUBLIC_TOKEN1</code> and{" "}
-          <code>NEXT_PUBLIC_POOL_ID</code> — see <code>web/.env.example</code>.
+          <code>NEXT_PUBLIC_POOL_ID</code>. See <code>web/.env.example</code>.
         </p>
       </div>
     );
@@ -203,7 +203,7 @@ export default function SwapPanel() {
           <p className="mono">
             Seed the pool on that network:{" "}
             <code>forge script script/SeedPool.s.sol:SeedPool --rpc-url &lt;rpc&gt; --broadcast</code>
-            {" "}— then put the printed addresses in <code>web/.env.local</code>.
+            {" "}Then put the printed addresses in <code>web/.env.local</code>.
           </p>
         </div>
       )}

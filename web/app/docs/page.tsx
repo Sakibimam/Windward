@@ -17,7 +17,7 @@ export default function Docs() {
           <p className="eyebrow">Docs</p>
           <h1 className="display page-h">Everything needed to check our work.</h1>
           <p className="lede narrow">
-            The mechanism, the four parameters, how to point a pool at it, and the ten limits —
+            The mechanism, the four parameters, how to point a pool at it, and the ten limits,
             including the ones that undercut the result.
           </p>
           <nav className="toc">
@@ -68,7 +68,7 @@ export default function Docs() {
                   <td className="mono">beforeSwap</td>
                   <td>
                     Takes <code>√variance</code>, scales by <code>feePerSigma</code>, clamps into
-                    the band, returns it with the override flag — for that swap only.
+                    the band, returns it with the override flag, for that swap only.
                   </td>
                 </tr>
               </tbody>
@@ -77,7 +77,7 @@ export default function Docs() {
 
           <p className="narrow">
             Two details matter more than they look. WAD scaling is carried <em>through</em> the
-            division rather than after it — doing it the other way rounded{" "}
+            division rather than after it. Doing it the other way rounded{" "}
             <strong>{v1.pctObservationsRoundingToZero}%</strong> of real observations to zero,
             which is the bug the study found. And when <code>Δt</code> is zero the anchor is held
             rather than updated, which is what stops a dust swap suppressing the estimate.
@@ -137,7 +137,7 @@ export default function Docs() {
               <h3>Initialise with the dynamic-fee flag</h3>
               <p>
                 The pool key&rsquo;s fee field must be <code>0x800000</code>. Anything else and{" "}
-                <code>afterInitialize</code> reverts — by design, so a pool cannot silently get a
+                <code>afterInitialize</code> reverts by design, so a pool cannot silently get a
                 static fee from a dynamic hook.
               </p>
             </div>
@@ -179,7 +179,7 @@ export default function Docs() {
                 <tr><th>Chain</th><td>Unichain Sepolia · {DEPLOYED.chainId}</td></tr>
                 <tr><th>Block</th><td className="num">{fmt(DEPLOYED.block)}</td></tr>
                 <tr><th>Admin surface</th><td>None. No owner, pause, upgrade path or setter.</td></tr>
-                <tr><th>Can it move funds?</th><td>No — all four <code>*_RETURNS_DELTA</code> bits are clear.</td></tr>
+                <tr><th>Can it move funds?</th><td>No. All four <code>*_RETURNS_DELTA</code> bits are clear.</td></tr>
               </tbody>
             </table>
           </div>
@@ -220,7 +220,7 @@ export default function Docs() {
             </li>
             <li>
               <strong>The replay covers the five busiest pools only.</strong> 136,167 swaps across
-              227 pools were never replayed — the thin-pool regime is untested.
+              227 pools were never replayed, so the thin-pool regime is untested.
             </li>
             <li>
               <strong>The fee is charged to the trader after the mover.</strong> A property of

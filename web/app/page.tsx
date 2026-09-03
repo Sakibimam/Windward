@@ -20,8 +20,9 @@ export default function Page() {
             Wild pool, <em>higher fee</em>.
           </h1>
           <p className="lede narrow">
-            Windward watches how much a Uniswap pool is really moving and sets the trading fee to
-            match — every swap, automatically. No oracle. No admin. No one to trust.
+            Windward reads how hard a pool is moving and sets the trading fee to match, on every
+            swap. It works from the pool&rsquo;s own price history, so there is no oracle to feed it
+            and no key that can change it.
           </p>
           <div className="hero-actions">
             <Link href="/demo" className="btn">See it live</Link>
@@ -63,7 +64,7 @@ export default function Page() {
             </div>
             <div className="step">
               <h3>Price</h3>
-              <p>Before the next swap, that number becomes the fee — between 0.05% and 1%.</p>
+              <p>Before the next swap, that number becomes the fee, between 0.05% and 1%.</p>
             </div>
             <div className="step">
               <h3>Forget</h3>
@@ -81,8 +82,8 @@ export default function Page() {
           <p className="narrow">
             Sort real swaps by the fee they paid, then measure what the price did{" "}
             <em>afterwards</em>. The most expensive tenth precede moves{" "}
-            <strong className="sig">{r2(liftRange)}×</strong> bigger than the cheapest — in all
-            five of Unichain&rsquo;s busiest pools.
+            <strong className="sig">{r2(liftRange)}×</strong> bigger than the cheapest, in all five
+            of Unichain&rsquo;s busiest pools.
           </p>
           <LiftSection />
           <p className="narrow" style={{ marginTop: 26 }}>
@@ -100,7 +101,7 @@ export default function Page() {
           <h2 className="head">Two popular signals point the wrong way.</h2>
           <p className="narrow">
             Most dynamic-fee designs read one of these. On {fmt(micro.swaps)} real Unichain swaps,
-            both behave backwards — so Windward uses neither.
+            both behave backwards, so Windward uses neither.
           </p>
           <div className="findings">
             <div className="finding bad">
@@ -117,7 +118,7 @@ export default function Page() {
               <h3>Price staleness</h3>
               <p>
                 Idle pools are meant to drift out of line. The longest-idle tenth precede{" "}
-                <em>smaller</em> moves — {r2(staleLift)}× against {r2(staleNull)}× for shuffled
+                <em>smaller</em> moves: {r2(staleLift)}× against {r2(staleNull)}× for shuffled
                 data.
               </p>
             </div>

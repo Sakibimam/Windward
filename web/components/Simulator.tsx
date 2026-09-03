@@ -167,7 +167,7 @@ export default function Simulator() {
       </svg>
 
       <p className="sim-foot mono">
-        Running <code>Volatility.sol</code> arithmetic in BigInt — feeMin {String(DEPLOYED.feeMin)},
+        Running <code>Volatility.sol</code> arithmetic in BigInt. feeMin {String(DEPLOYED.feeMin)},
         feeMax {String(DEPLOYED.feeMax)}, feePerSigma {String(DEPLOYED.feePerSigma)}, halfLife{" "}
         {String(DEPLOYED.halfLife)}s. Same parameters as the deployed hook. Seeded, so it replays
         identically.
