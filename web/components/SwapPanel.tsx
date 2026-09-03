@@ -22,6 +22,7 @@ export default function SwapPanel() {
   const [err, setErr] = useState<string | null>(null);
   const [fee, setFee] = useState<{ before: number; after: number } | null>(null);
   const [bal, setBal] = useState<bigint | null>(null);
+  const [ethBal, setEthBal] = useState<bigint | null>(null);
   // null = not checked yet. false = the tokens are not on the wallet's chain.
   const [onRightChain, setOnRightChain] = useState<boolean | null>(null);
   // `window.ethereum` does not exist during the static render, so wallet presence can only be
@@ -50,14 +51,19 @@ export default function SwapPanel() {
 
   const refreshBalance = useCallback(async (a: Address) => {
     if (!TOKEN0) return;
-    if (!(await checkChain())) { setBal(null); return; }
+    if (!(await checkChain())) { setBal(null); setEthBal(null); return; }
     try {
-      const b = await walletPublicClient().readContract({
-        address: TOKEN0 as Address, abi: erc20Abi, functionName: "balanceOf", args: [a],
-      });
+      const [b, eth] = await Promise.all([
+        walletPublicClient().readContract({
+          address: TOKEN0 as Address, abi: erc20Abi, functionName: "balanceOf", args: [a],
+        }),
+        walletPublicClient().getBalance({ address: a }),
+      ]);
       setBal(b);
+      setEthBal(eth);
     } catch {
       setBal(null);
+      setEthBal(null);
     }
   }, [checkChain]);
 
@@ -198,6 +204,28 @@ export default function SwapPanel() {
         </div>
       )}
 
+      {account && ethBal === 0n && (
+        <div className="swap-warn" style={{ marginBottom: "1rem" }}>
+          <p>
+            <strong>Unichain Sepolia Testnet Gas Required:</strong> Minting tokens and swapping are free, but the testnet sequencer requires a tiny fraction of testnet ETH for transaction gas.
+          </p>
+          <p style={{ marginTop: "0.5rem" }}>
+            Get free testnet ETH:{" "}
+            <a href="https://faucet.ethglobal.com/" target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>
+              ETHGlobal Faucet
+            </a>{" "}
+            ·{" "}
+            <a href="https://thirdweb.com/unichain-sepolia-testnet/" target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>
+              Thirdweb Faucet
+            </a>{" "}
+            ·{" "}
+            <a href="https://superbridge.app/unichain-sepolia" target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>
+              Superbridge (Bridge Sepolia ETH)
+            </a>
+          </p>
+        </div>
+      )}
+
       {account && (
         <>
           <div className="swap-actions">
@@ -209,7 +237,8 @@ export default function SwapPanel() {
             </button>
             {bal !== null && (
               <span className="mono bal">
-                balance {(Number(bal / 10n ** 15n) / 1000).toLocaleString()} WTA
+                {(Number(bal / 10n ** 15n) / 1000).toLocaleString()} WTA
+                {ethBal !== null && ` · ${(Number(ethBal / 10n ** 14n) / 10000).toFixed(4)} test ETH`}
               </span>
             )}
           </div>
