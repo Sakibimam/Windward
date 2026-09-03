@@ -129,6 +129,7 @@ h2.head em { font-style: italic; color: var(--signal-2); }
 }
 p { margin: 0 0 15px; color: var(--fg-2); max-width: 66ch; }
 .lede { font-size: 16.5px; line-height: 1.62; color: var(--fg); }
+.hero .lede { font-size: 15.5px; color: var(--fg-3); max-width: 62ch; }
 strong { color: var(--fg); font-weight: 600; }
 .sig { color: var(--signal); }
 code { font-family: var(--mono); font-size: 0.88em; color: var(--lav); }
@@ -159,14 +160,9 @@ a { color: var(--signal); text-underline-offset: 3px; }
 /* Small capsule above the hero headline, as on the reference. */
 .badge-pill {
   display: inline-flex; align-items: center; gap: 8px;
-  font-family: var(--sans); font-size: 12.5px; color: var(--fg-2);
+  font-family: var(--sans); font-size: 13px; color: var(--fg-3);
   background: var(--ink-2); border: 1px solid var(--rule);
-  padding: 7px 16px; border-radius: 999px; margin-bottom: 26px;
-}
-.badge-pill::before {
-  content: ""; width: 5px; height: 5px; border-radius: 50%;
-  background: var(--signal); flex: none;
-  box-shadow: 0 0 8px 1px rgba(240, 72, 192, 0.7);
+  padding: 8px 18px; border-radius: 999px; margin-bottom: 30px;
 }
 .nav-links {
   display: flex; align-items: center; gap: 2px;
@@ -175,8 +171,8 @@ a { color: var(--signal); text-underline-offset: 3px; }
   border: 1px solid var(--rule); border-radius: 999px; padding: 5px;
 }
 .nav-l {
-  font-size: 13.5px; color: var(--fg-3); text-decoration: none;
-  padding: 8px 16px; border-radius: 999px; border: 1px solid transparent;
+  font-size: 14px; color: var(--fg-3); text-decoration: none;
+  padding: 9px 20px; border-radius: 999px; border: 1px solid transparent;
   transition: color 0.18s, background 0.18s;
   white-space: nowrap;
 }
@@ -229,9 +225,8 @@ a { color: var(--signal); text-underline-offset: 3px; }
 @media (max-height: 640px) { .scroll-cue { display: none; } .hero { padding-bottom: 40px; } }
 .hero .shell > * { margin-left: auto; margin-right: auto; }
 .hero .eyebrow { justify-content: center; }
-.hero .lede { max-width: 56ch; }
 .hero .hero-actions { justify-content: center; }
-.hero-h { font-size: clamp(38px, 5.6vw, 64px); margin-bottom: 22px; }
+.hero-h { font-size: clamp(40px, 6.2vw, 72px); margin-bottom: 24px; }
 .page-head { padding: clamp(48px, 5vw, 64px) 0 8px; }
 .page-h { font-size: clamp(31px, 4.4vw, 47px); margin-bottom: 16px; }
 @media (max-width: 760px) { .hero { padding: 56px 0 44px; } .page-head { padding: 44px 0 14px; } }
@@ -374,19 +369,19 @@ td.num { font-family: var(--mono); font-size: 13px; white-space: nowrap; }
 
 /* -------------------------------------------------------------------- ctas */
 .btn {
-  font-family: var(--sans); font-size: 14px; font-weight: 600;
-  padding: 13px 26px; border-radius: 999px; border: 1px solid transparent;
-  background: var(--wave); color: #12060f; cursor: pointer; text-decoration: none;
-  display: inline-block; transition: filter 0.18s, transform 0.18s;
+  font-family: var(--sans); font-size: 14.5px; font-weight: 500;
+  padding: 15px 32px; border-radius: 999px; border: 1px solid transparent;
+  background: var(--fg); color: var(--ink); cursor: pointer; text-decoration: none;
+  display: inline-block; transition: opacity 0.18s, background 0.18s, transform 0.18s;
 }
-.btn:hover { filter: brightness(1.12); }
+.btn:hover { opacity: 0.88; }
 .btn:active { transform: translateY(1px); }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; filter: none; }
-.btn.ghost { background: none; color: var(--signal); border-color: var(--signal-dim); }
-.btn.ghost:hover { background: var(--signal-soft); filter: none; }
+.btn.ghost { background: var(--rule-2); color: var(--fg); border-color: var(--rule); }
+.btn.ghost:hover { background: var(--rule-2); border-color: var(--rule-3); opacity: 1; }
 .btn.big { font-size: 15px; padding: 15px 32px; margin-top: 6px; }
 .cta-band { background: linear-gradient(180deg, var(--violet-soft), var(--ink) 80%); }
-.hero-actions { display: flex; gap: 11px; flex-wrap: wrap; margin-top: 34px; }
+.hero-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 40px; }
 
 /* --------------------------------------------------------------- simulator */
 .sim {

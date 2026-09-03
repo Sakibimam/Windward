@@ -20,9 +20,7 @@ export default function Page() {
             Wild pool, <em>higher fee</em>.
           </h1>
           <p className="lede narrow">
-            Windward reads how hard a pool is moving and sets the trading fee to match, on every
-            swap. It works from the pool&rsquo;s own price history, so there is no oracle to feed it
-            and no key that can change it.
+            Sets the fee for every swap from the pool&rsquo;s own volatility.
           </p>
           <div className="hero-actions">
             <Link href="/demo" className="btn">See it live</Link>

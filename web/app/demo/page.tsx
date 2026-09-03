@@ -39,8 +39,8 @@ export default function DemoPage() {
           <p className="eyebrow">2 · The deployed contract</p>
           <h2 className="head">Same hook, read live from chain.</h2>
           <p className="narrow">
-            Read-only, straight from the deployed address. No wallet, no signature, no transaction
-            just the contract&rsquo;s current state, polled every few seconds.
+            Read-only, straight from the deployed address. No wallet, no signature, no
+            transaction. Just the contract&rsquo;s current state, polled every few seconds.
           </p>
           <LiveFee />
         </div>
