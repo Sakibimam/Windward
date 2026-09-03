@@ -84,7 +84,7 @@ export default function Footer() {
         <div className="foot-bar">
           <p className="dim">© {new Date().getFullYear()} Windward · MIT licensed</p>
           <p className="dim">
-            Unaudited prototype · testnet only · must not secure real funds
+            Unaudited prototype · testnet only · one security finding open
           </p>
         </div>
       </div>

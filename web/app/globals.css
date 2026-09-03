@@ -386,7 +386,14 @@ td.num { font-family: var(--mono); font-size: 13px; white-space: nowrap; }
 .btn.ghost { background: none; color: var(--signal); border-color: var(--signal-dim); }
 .btn.ghost:hover { background: var(--signal-soft); filter: none; }
 .btn.big { font-size: 15px; padding: 15px 32px; margin-top: 6px; }
-.cta-band { background: linear-gradient(180deg, var(--violet-soft), var(--ink) 80%); }
+/* The closing band mirrors the hero: centred, generous, one action. */
+.cta-band {
+  background: linear-gradient(180deg, var(--violet-soft), var(--ink) 82%);
+  text-align: center;
+}
+.cta-band .shell > * { margin-left: auto; margin-right: auto; }
+.cta-band .narrow { max-width: 54ch; }
+.cta-band .btn { margin-top: 30px; }
 .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 40px; }
 
 /* --------------------------------------------------------------- simulator */

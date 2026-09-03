@@ -139,11 +139,12 @@ export default function Page() {
       {/* ------------------------------------------------------------------ cta */}
       <section className="cta-band">
         <div className="shell">
-          <h2 className="head">Watch it price a market.</h2>
+          <h2 className="head">Move the fee yourself.</h2>
           <p className="narrow">
-            A simulator, the deployed contract read live, and a pool you can trade yourself.
+            Swap the live pool and watch the fee climb. Then stop, and watch it fall back on its
+            own with nobody trading.
           </p>
-          <Link href="/demo" className="btn big">See it live</Link>
+          <Link href="/demo" className="btn big">Open the live demo</Link>
         </div>
       </section>
     </main>
