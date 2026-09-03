@@ -88,7 +88,7 @@ Three pages, all reading the same committed JSON the study produced.
 | | |
 |---|---|
 | ![Live demo](docs/screenshots/demo.png) | **`/demo`** — the estimator running in the browser on synthetic flow, the deployed contract read live over RPC, and a pool you can trade yourself with a wallet. |
-| ![Docs](docs/screenshots/docs.png) | **`/docs`** — the mechanism, the four parameters, integration requirements, deployment evidence, and all ten limits. |
+| ![Docs](docs/screenshots/docs.png) | **`/docs`** — what the hook does in plain English, the mechanism with worked examples computed from the estimator itself, the four parameters, integration requirements, deployment evidence, all ten limits, and a glossary. |
 
 ## The finding
 
