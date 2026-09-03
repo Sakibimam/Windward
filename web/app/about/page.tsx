@@ -10,7 +10,7 @@ const ri = ([a, b]: readonly [number, number]) => `${fmt(a)}–${fmt(b)}`;
 
 export default function AboutPage() {
   return (
-    <main>
+    <main className="doc">
       <header className="page-head">
         <div className="shell">
           <p className="eyebrow">Method</p>

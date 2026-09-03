@@ -11,7 +11,7 @@ export const metadata = {
 
 export default function Docs() {
   return (
-    <main>
+    <main className="doc">
       <header className="page-head">
         <div className="shell">
           <p className="eyebrow">Docs</p>

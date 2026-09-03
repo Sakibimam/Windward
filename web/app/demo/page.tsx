@@ -6,7 +6,7 @@ export const metadata = { title: "Live demo · Windward" };
 
 export default function DemoPage() {
   return (
-    <main>
+    <main className="doc wide">
       <header className="page-head">
         <div className="shell">
           <p className="eyebrow">Live demo</p>

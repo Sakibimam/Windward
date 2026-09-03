@@ -49,6 +49,9 @@
   --lift: 0 24px 48px -20px rgba(0, 0, 0, 0.9);
   --wave: linear-gradient(96deg, var(--signal) 0%, var(--violet-2) 52%, var(--violet) 100%);
 
+  /* Nav height, so the full-height hero can subtract exactly the right amount. */
+  --nav-h: 80px;
+
 }
 
 /* The font tokens live on `body`, not `:root`. next/font puts --font-display/-sans/-mono on the
@@ -119,7 +122,7 @@ section { padding: clamp(44px, 5vw, 66px) 0; border-top: 1px solid var(--rule-2)
 }
 h2.head {
   font-family: var(--disp); font-weight: 400;
-  font-size: clamp(23px, 2.9vw, 33px); line-height: 1.16; letter-spacing: -0.006em;
+  font-size: clamp(21px, 2.9vw, 33px); line-height: 1.16; letter-spacing: -0.006em;
   margin: 0 0 16px; text-wrap: balance; color: var(--fg);
 }
 h2.head em { font-style: italic; color: var(--signal-2); }
@@ -191,15 +194,27 @@ a { color: var(--signal); text-underline-offset: 3px; }
   .nav-links { position: static; transform: none; margin-left: auto; }
   .nav-cta { display: none; }
 }
-@media (max-width: 620px) { .nav-links { padding: 3px; } .nav-l { padding: 7px 11px; font-size: 12.5px; } }
+@media (max-width: 620px) {
+  :root { --nav-h: 64px; }
+  .nav { padding: 10px 0; }
+  .nav-in { gap: 10px; height: 44px; }
+  .nav-links { padding: 3px; }
+  .nav-l { padding: 6px 9px; font-size: 12px; }
+  .brand-name { font-size: 16px; }
+  .brand-mark { width: 24px; height: 24px; border-radius: 7px; }
+}
+@media (max-width: 430px) {
+  .brand-name { display: none; }
+  .nav-l { padding: 6px 8px; font-size: 11.5px; letter-spacing: -0.01em; }
+}
 
 /* -------------------------------------------------------------- page heads */
 /* The hero owns the first screen. The nav is 80px (14 + 52 + 14) and sits in flow above it, so
    the hero takes what is left; svh keeps mobile browser chrome from cropping it. Content is
    centred in that box rather than pushed down by padding, so it holds at any viewport height. */
 .hero {
-  min-height: calc(100vh - 80px);
-  min-height: calc(100svh - 80px);
+  min-height: calc(100vh - var(--nav-h));
+  min-height: calc(100svh - var(--nav-h));
   display: flex; align-items: center;
   padding: 40px 0 96px; text-align: center; position: relative;
 }
@@ -232,9 +247,37 @@ a { color: var(--signal); text-underline-offset: 3px; }
 .hero .btn:hover { filter: none; opacity: 0.88; }
 .hero .btn.ghost { background: var(--rule-2); color: var(--fg); border-color: var(--rule); }
 .hero .btn.ghost:hover { background: var(--rule); opacity: 1; }
-.hero-h { font-size: clamp(40px, 6.2vw, 72px); margin-bottom: 24px; }
+.hero-h { font-size: clamp(29px, 6.2vw, 72px); margin-bottom: 24px; }
+/* ------------------------------------------------------------ content pages
+ * The landing page wants a wide frame; demo, docs and method want a reading
+ * column. At 1280px the prose measured 436px against 1224px tables, which read
+ * as a narrow column adrift in an empty frame rather than a considered layout.
+ * These pages get a narrower shell so the two agree, and a page head with the
+ * same breathing room the hero has.
+ */
+.doc .shell { max-width: 940px; }
+/* The demo's panels are instruments, not prose: the simulator's readouts and its five controls
+   need one row, and at 940px they wrapped and left a hole. Prose inside stays at 70ch. */
+.doc.wide .shell { max-width: 1120px; }
+.doc.wide .sim-head { gap: 26px; }
+
+/* A 42-character address forces a table wider than a phone, so it wraps rather than making the
+   reader scroll a table sideways to finish one cell. */
+@media (max-width: 560px) {
+  .doc table { font-size: 12.5px; }
+  .doc td .mono, .doc td.mono-c, .doc td code { overflow-wrap: anywhere; word-break: break-all; }
+  .doc th, .doc td { padding-right: 10px; }
+}
+.doc p, .doc .narrow, .doc .lede { max-width: 70ch; }
+.doc section { padding: clamp(52px, 5.5vw, 76px) 0; }
+
+.doc .page-head { text-align: center; padding: clamp(72px, 8vw, 120px) 0 clamp(8px, 1vw, 16px); }
+.doc .page-head .eyebrow { justify-content: center; }
+.doc .page-head .lede { margin-left: auto; margin-right: auto; max-width: 60ch; }
+.doc .page-head .toc { justify-content: center; }
+
 .page-head { padding: clamp(48px, 5vw, 64px) 0 8px; }
-.page-h { font-size: clamp(31px, 4.4vw, 47px); margin-bottom: 16px; }
+.page-h { font-size: clamp(26px, 4.4vw, 47px); margin-bottom: 16px; }
 @media (max-width: 760px) { .hero { padding: 56px 0 44px; } .page-head { padding: 44px 0 14px; } }
 
 /* ------------------------------------------------------------------- facts */
