@@ -38,15 +38,15 @@ export default function Nav() {
               {l.label}
             </Link>
           ))}
+          </div>
           <a
-            className="nav-l ext"
+            className="nav-cta"
             href="https://github.com/Sakibimam/Windward"
             target="_blank"
             rel="noreferrer"
           >
-            GitHub ↗
+            View the code
           </a>
-        </div>
       </div>
     </nav>
   );

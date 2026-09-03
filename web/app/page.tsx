@@ -14,7 +14,7 @@ export default function Page() {
       {/* ---------------------------------------------------------------- hero */}
       <header className="hero">
         <div className="shell">
-          <p className="eyebrow">Uniswap v4 hook · UHI10 Hookathon</p>
+          <span className="badge-pill">Uniswap v4 hook &middot; UHI10 Hookathon</span>
           <h1 className="display hero-h">
             Calm pool, cheap swap.<br />
             Wild pool, <em>higher fee</em>.
