@@ -158,6 +158,23 @@ function LiveChart({ hist }: { hist: Sample[] }) {
   const line = hist.map((s, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(s.fee).toFixed(1)}`).join(" ");
   const area = `${line} L${x(n - 1).toFixed(1)},${(H - PAD_B).toFixed(1)} L${x(0).toFixed(1)},${(H - PAD_B).toFixed(1)} Z`;
 
+  /* Every swap gets a rule, but only some get a caption. Three swaps a few seconds apart land on
+     adjacent samples, and at this width their labels sat on top of each other and became an
+     unreadable smear. A label is drawn only when there is room since the last one; the rest keep
+     their rule and a cap dot, so no trade is hidden. */
+  const LABEL_GAP = 86;
+  let lastLabelX = -Infinity;
+  const marks = hist
+    .map((s, i) => (s.swap ? i : -1))
+    .filter((i) => i >= 0)
+    .map((i) => {
+      const px = x(i);
+      const label = px - lastLabelX >= LABEL_GAP;
+      if (label) lastLabelX = px;
+      return { i, px, label };
+    });
+  const labelled = marks.filter((m) => m.label).length;
+
   const first = hist[0].fee;
   const last = hist[n - 1].fee;
   const delta = last - first;
@@ -194,21 +211,25 @@ function LiveChart({ hist }: { hist: Sample[] }) {
         <path d={line} fill="none" stroke="var(--signal)" strokeWidth="2"
           strokeLinejoin="round" strokeLinecap="round" />
 
-        {hist.map((s, i) =>
-          s.swap ? (
-            <g key={i}>
-              <line x1={x(i)} y1={PAD_T} x2={x(i)} y2={H - PAD_B}
-                stroke="var(--violet-2)" strokeWidth="1" strokeDasharray="3 3" />
-              <text x={x(i)} y={PAD_T - 2} textAnchor="middle" className="axis-t">your swap</text>
-            </g>
-          ) : null,
-        )}
+        {marks.map((m) => (
+          <g key={m.i}>
+            <line x1={m.px} y1={PAD_T + 4} x2={m.px} y2={H - PAD_B}
+              stroke="var(--violet-2)" strokeWidth="1" strokeDasharray="3 3" opacity="0.75" />
+            <circle cx={m.px} cy={PAD_T + 4} r="2" fill="var(--violet-2)" />
+            {m.label && (
+              <text x={m.px} y={PAD_T - 3} textAnchor="middle" className="axis-t swap-tag">
+                your swap
+              </text>
+            )}
+          </g>
+        ))}
 
         <circle cx={x(n - 1)} cy={y(last)} r="3.5" fill="var(--signal)" />
       </svg>
 
       <p className="mono live-chart-foot">
-        {span}s of chain history · {n} reads ·{" "}
+        {span}s of chain history · {n} reads
+        {marks.length > 0 && ` · ${marks.length} swap${marks.length === 1 ? "" : "s"} of yours`} ·{" "}
         {delta === 0 ? "flat" : `${delta > 0 ? "+" : ""}${delta} pips`} since this page opened.
         Dashed line is the 0.05% floor a static pool would have charged throughout.
         {zoomed && " Axis fitted to the range shown; the hook's ceiling is 1%."}
