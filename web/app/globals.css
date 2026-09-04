@@ -356,6 +356,24 @@ a { color: var(--signal); text-underline-offset: 3px; }
 .axis-t { fill: var(--fg-3); font-family: var(--mono); font-size: 9px; }
 /* Swap captions sit above the plot and must read against the panel, not recede like an axis. */
 .swap-tag { fill: var(--violet-2); letter-spacing: 0.06em; }
+
+/* ------------------------------------------------------------- lifecycle */
+.lifecycle { margin: 26px 0 10px; }
+.lc-draw { overflow-x: auto; border: 1px solid var(--rule-2); border-radius: 6px;
+           background: var(--ink-2); padding: 18px 16px; }
+.lc-draw svg { width: 100%; min-width: 560px; height: auto; display: block; }
+.lc-lane { fill: var(--fg-3); font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.05em; }
+.lc-lane-on { fill: var(--signal-2); }
+.lc-num { fill: var(--fg-2); font-family: var(--mono); font-size: 9px; }
+.lc-note { fill: var(--fg-3); font-family: var(--mono); font-size: 8px; letter-spacing: 0.16em; text-transform: uppercase; }
+
+.lc-key { list-style: none; padding: 0; margin: 18px 0 0; display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1px;
+          background: var(--rule-2); border: 1px solid var(--rule-2); }
+.lc-key li { background: var(--ink); padding: 12px 15px; display: grid;
+             grid-template-columns: 20px 1fr; gap: 10px; align-items: baseline; }
+.lc-key b { font-family: var(--mono); font-size: 11px; color: var(--signal); font-weight: 400; }
+.lc-key span { font-size: 13.5px; color: var(--fg-2); line-height: 1.5; }
 .axis-v { fill: var(--fg); font-family: var(--mono); font-size: 10.5px; font-weight: 500; }
 .cap { font-size: 12.5px; color: var(--fg-3); margin: 12px 0 0; max-width: none; }
 

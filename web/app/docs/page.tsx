@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Lifecycle from "@/components/Lifecycle";
 import { gas, gasEcon, fmt, v1 } from "@/lib/data";
 import { DEPLOYED, WAD, update, feeFor, sigmaWad, decayFactor } from "@/lib/volatility";
 
@@ -54,6 +55,7 @@ export default function Docs() {
           </p>
           <nav className="toc">
             <a href="#start">Start here</a>
+            <a href="#architecture">Architecture</a>
             <a href="#mechanism">Mechanism</a>
             <a href="#parameters">Parameters</a>
             <a href="#integrate">Integration</a>
@@ -105,6 +107,74 @@ export default function Docs() {
             whoever trades next pays the raised one. That ordering is a property of every fee that
             reacts to price rather than predicting it, and it is stated again under{" "}
             <a href="#limits">Limits</a>.
+          </p>
+        </div>
+      </section>
+
+      {/* ----------------------------------------------------------- architecture */}
+      <section id="architecture">
+        <div className="shell">
+          <p className="eyebrow">Architecture</p>
+          <h2 className="head">Where the hook sits.</h2>
+          <p className="narrow">
+            Uniswap v4 lets a contract register for callbacks at fixed points in a swap. Windward
+            registers for two of them: once just before the swap, to set the fee, and once just
+            after, to record what happened. Both happen inside the trader&rsquo;s own transaction.
+          </p>
+
+          <Lifecycle />
+
+          <p className="narrow">
+            Steps 3, 4 and 7 are the only places the hook touches storage, and what it touches is a
+            single number for that pool. There is no queue, no scheduled job and no second contract.
+            If the trade reverts, every one of these steps reverts with it.
+          </p>
+
+          <h3 className="sub-head">What it is allowed to do</h3>
+          <p className="narrow">
+            A v4 hook&rsquo;s powers are encoded in its own address, and the protocol checks them
+            before it will run. Windward&rsquo;s address grants three and withholds the rest.
+          </p>
+          <div className="tw">
+            <table>
+              <thead><tr><th>Capability</th><th>Windward</th><th>What that means for you</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td className="mono">beforeSwap</td>
+                  <td className="keep">granted</td>
+                  <td>It can set the fee for the swap about to happen.</td>
+                </tr>
+                <tr>
+                  <td className="mono">afterSwap</td>
+                  <td className="keep">granted</td>
+                  <td>It can read the price the swap ended at.</td>
+                </tr>
+                <tr>
+                  <td className="mono">afterInitialize</td>
+                  <td className="keep">granted</td>
+                  <td>It sets a pool up the first time, and refuses pools that are not dynamic-fee.</td>
+                </tr>
+                <tr>
+                  <td className="mono">*_RETURNS_DELTA</td>
+                  <td className="cut">withheld</td>
+                  <td>
+                    It cannot take, redirect or keep any part of a trade. v4 never even reads a
+                    balance change back from it, so the inability is the protocol&rsquo;s, not a
+                    promise of ours.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Liquidity callbacks</td>
+                  <td className="cut">withheld</td>
+                  <td>It is not called when anyone adds or removes liquidity, so it cannot block a withdrawal.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="narrow">
+            Those permissions are readable from the deployed address itself, which is how the
+            constructor validates them. See <a href="#deploy">Deployment</a> for the values read
+            back off chain.
           </p>
         </div>
       </section>
