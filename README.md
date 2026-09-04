@@ -5,10 +5,12 @@ while it is calm — reading nothing but the pool's own price history.**
 
 UHI10 Hookathon · *The Fair Flow Frontier* · MIT licensed
 
+**[▶ Watch the demo](https://www.youtube.com/watch?v=rijNwMYhWw4)**  ·  **[Try it live](https://windward-hook.vercel.app/)**  ·  [Docs](https://windward-hook.vercel.app/docs)  ·  [Method](https://windward-hook.vercel.app/about)
+
 Live on Unichain Sepolia: **`0x609634584d5BD12Ba4216116528e364d385Ad0C0`** — runtime bytecode
 verified against source (`docs/DEPLOYMENT.md`).
 
-![The Windward overview page](docs/screenshots/home.png)
+[![Windward: calm pool, cheap swap. Wild pool, higher fee.](docs/og.png)](https://www.youtube.com/watch?v=rijNwMYhWw4)
 
 ## What it does
 
@@ -84,6 +86,8 @@ which is what closes the dust-swap attack. Run `script/Trade.s.sol` repeatedly, 
 ## The site
 
 Three pages, all reading the same committed JSON the study produced.
+
+![The Windward overview page](docs/screenshots/home.png)
 
 | | |
 |---|---|
@@ -217,5 +221,11 @@ No other partner technology is used.
 | `docs/LIMITATIONS.md` | All ten limitations |
 | `docs/DEPLOYMENT.md` | Deployment evidence, read back from chain |
 | `THREAT_MODEL.md` · `SECURITY.md` · `DECISIONS.md` | Vectors · policy · append-only decision log |
+
+## Author
+
+Built by **Sakib Imam** for the UHI10 Hookathon.
+
+[X / Twitter](https://x.com/hisakibimam) · [GitHub](https://github.com/Sakibimam) · hisakibimam@gmail.com
 
 MIT licensed. See `LICENSE`.

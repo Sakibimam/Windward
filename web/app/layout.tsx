@@ -25,11 +25,30 @@ const mono = IBM_Plex_Mono({
   display: "swap",
 });
 
+const SITE = "https://windward-hook.vercel.app";
+const BLURB =
+  "A Uniswap v4 hook that prices volatility from the pool's own tick history, and the shuffled-null control built to falsify it.";
+
 export const metadata: Metadata = {
-  title: "Windward",
-  description:
-    "A Uniswap v4 hook that prices volatility from the pool's own tick history, and the shuffled-null control built to falsify it.",
+  metadataBase: new URL(SITE),
+  title: { default: "Windward", template: "%s · Windward" },
+  description: BLURB,
   icons: { icon: "/windward-mark.png" },
+  openGraph: {
+    type: "website",
+    url: SITE,
+    siteName: "Windward",
+    title: "Windward — calm pool, cheap swap. Wild pool, higher fee.",
+    description: BLURB,
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "Windward: a Uniswap v4 hook that prices every swap off the pool's own volatility." }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Windward — calm pool, cheap swap. Wild pool, higher fee.",
+    description: BLURB,
+    creator: "@hisakibimam",
+    images: ["/og.png"],
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
